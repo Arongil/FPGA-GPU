@@ -16,11 +16,10 @@ module fma_memory_buffer #(
 
     //  FMA MEMORY BUFFER
     //
-    //     This module provides an interface for simultaneous reads for the FMA blocks.
-    //     The memory controller module sets the inputs to the memory buffer,
-    //     orchestrated by the controller. The memory controller is the interface to the
-    //     data cache composed of BRAMs. This module receives possibly sequential information
-    //     from the memory controller, preparing a unified output to all FMA units at once.
+    //     The memory buffer provides an interface for simultaneous reads for the FMA blocks.
+    //     The data cache, receiving commands from the controller, sends data to the memory buffer.
+    //     Even though the data cache possibly only sends sequential information, the memory buffer 
+    //     prepares a unified output for FMA units to read all at once.
     //     
     //     Inputs:
     //       abc_in: array of length FMA_COUNT, each element being three numbers "a b c"
