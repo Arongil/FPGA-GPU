@@ -1,2 +1,2 @@
 # FPGA-GPU
-6.111 Final Project by Laker and Hanfei
+6.205 Final Project by Laker and Hanfei
