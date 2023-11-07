@@ -55,7 +55,8 @@ module fma_memory_buffer #(
             for (int i = 0; i < FMA_COUNT; i = i + 1) begin
                 c_valid[i] <= 0;
                 fma_prepared[i] <= 0;
-                abc[i] <= 48'b0; 
+                abc[i] <= 0; 
+                abc_out[i] <= 0;
             end
         end else begin
             case (state)
@@ -76,14 +77,16 @@ module fma_memory_buffer #(
                         endcase
                     end
                     if (fma_prepared + 1 == 0) begin // Check whether fma_prepared is all 1's.
-                        state <= OUTPUTTING;
-                        abc_out <= abc;
-                        c_valid_out <= c_valid;
+                        state <= WRITING;
                         abc_valid_out <= 1;
+                        for (int i = 0; i < FMA_COUNT; i = i + 1) begin
+                            abc_out[i] <= abc[i];
+                            c_valid_out[i] <= c_valid[i];
+                        end
                     end
                 end
 
-                OUTPUTTING: begin
+                WRITING: begin
                     // Assume abc_valid_out has just gone high. Reset everything.
                     state <= FILLING;
                     abc_valid_out <= 0;
