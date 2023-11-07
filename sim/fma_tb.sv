@@ -12,7 +12,6 @@ module fma_tb;
   logic a_valid_in, b_valid_in, c_valid_in;
   logic compute;
   logic [WIDTH-1:0] out; 
-  logic [2*WIDTH-1:0] multiplication_full_precision;
 
   fma #(.WIDTH(WIDTH), .FIXED_POINT(FIXED_POINT)) uut  // uut = unit under test
           (.clk_in(clk_in),
@@ -24,8 +23,7 @@ module fma_tb;
            .b_valid_in(b_valid_in),
            .c_valid_in(c_valid_in),
            .compute(compute),
-           .out(out),
-           .multiplication_full_precision(multiplication_full_precision));
+           .out(out));
 
   always begin
     #5;  //every 5 ns switch...so period of clock is 10 ns...100 MHz clock
@@ -36,7 +34,7 @@ module fma_tb;
   initial begin
     $dumpfile("fma.vcd"); //file to store value change dump (vcd)
     $dumpvars(0,fma_tb); //store everything at the current level and below
-    $display("Starting Sim"); //print nice message
+    $display("Starting Sim\n"); //print nice message
     clk_in = 0; //initialize clk (super important)
     rst_in = 0; //initialize rst (super important)
     #10  //wait a little bit of time at beginning
@@ -84,7 +82,7 @@ module fma_tb;
     compute = 0;
     $display("%16d * %16d = %16d", a, b, out);  // should be 30.75 (the previous answer)
 
-    $display("\nThe first two multiplications are a \"dot product\"\nwhere the answer is saved and added to the next result.\nThe third line resets the c value to 0.");
+    $display("\nThe first two multiplications are a \"dot product\"\nwhere the answer is saved and added to the next result.\nThe third line resets the c value to 0.\n");
 
     $finish;
 

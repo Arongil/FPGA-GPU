@@ -14,12 +14,11 @@ module fma #(
     input wire b_valid_in,    // only write external b value if valid_in is high
     input wire c_valid_in,    // only write external c value if valid_in is high
     input wire compute,  // high when the FMA should compute on the next cycle
-    output logic [WIDTH-1:0] out,
-    output logic [2*WIDTH-1:0] multiplication_full_precision
+    output logic [WIDTH-1:0] out
 );
 
     logic [WIDTH-1:0] a_internal, b_internal;
-    //logic [2*WIDTH-1:0] multiplication_full_precision;
+    logic [2*WIDTH-1:0] multiplication_full_precision;
 
     always_comb begin
         multiplication_full_precision = (
