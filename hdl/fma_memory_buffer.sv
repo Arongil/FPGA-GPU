@@ -33,7 +33,7 @@ module fma_memory_buffer #(
     //     By default, FMAs reuse their old "c" value. The reason is to allow simple chained dot products.
     //     If the controller chooses to overwrite the "c" value for FMA i, it must set the final bit of
     //     abc_valid_in[i] to 1. Then the memory buffer will set c_valid_out[i] to 1. When FMAs read,
-    //     they do not write in the "c" value from fma_out unless c_valid_out[i] is 1.
+    //     they do not write in the "c" value from abc_out unless c_valid_out[i] is 1.
     //     
     //     Outputs:
     //       abc_out: array of length FMA_COUNT, storing "a b c" for FMAs to read upon abc_valid_out high
