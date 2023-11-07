@@ -9,15 +9,15 @@ module fma_memory_buffer #(
     input wire rst_in,
     input wire [3 * WIDTH - 1 : 0] abc_in [FMA_COUNT-1 : 0],  // for each FMA i, abc_in[i] is laid out as "a b c" 
     input wire [3 - 1 : 0] abc_valid_in [FMA_COUNT - 1 : 0],
-    output logic [3 * WIDTH - 1 : 0] fma_out [FMA_COUNT - 1 : 0],
-    output logic fma_c_valid [FMA_COUNT - 1 : 0],
-    output logic fma_out_valid
+    output logic [3 * WIDTH - 1 : 0] abc_out [FMA_COUNT - 1 : 0],
+    output logic c_valid_out [FMA_COUNT - 1 : 0],
+    output logic abc_valid_out 
 );
 
     //  FMA MEMORY BUFFER
     //
     //     The memory buffer provides an interface for simultaneous reads for the FMA blocks.
-    //     The data cache, receiving commands from the controller, sends data to the memory buffer.
+    //     The memory buffer receives data from the data cache, which the controller commands.
     //     Even though the data cache possibly only sends sequential information, the memory buffer 
     //     prepares a unified output for FMA units to read all at once.
     //     
@@ -29,25 +29,29 @@ module fma_memory_buffer #(
     //     Once the "a" and "b" values of every FMA are marked as valid, the overall
     //     fma_valid_out flag goes high for one cycle. Every FMA connected to the
     //     memory buffer must read at this cycle.
+    //
+    //     By default, FMAs reuse their old "c" value. The reason is to allow simple chained dot products.
+    //     If the controller chooses to overwrite the "c" value for FMA i, it must set the final bit of
+    //     abc_valid_in[i] to 1. Then the memory buffer will set c_valid_out[i] to 1. When FMAs read,
+    //     they do not write in the "c" value from fma_out unless c_valid_out[i] is 1.
     //     
     //     Outputs:
-    //       fma_out: array of length FMA_COUNT, storing all numbers for FMAs to read upon fma_out_valid high
-    //       fma_c_valid: array of length FMA_COUNT, storing whether each FMA should read the "c" value or use its old "c" value
-    //       fma_out_valid: boolean that goes high when every FMA's input is ready to be read
+    //       abc_out: array of length FMA_COUNT, storing "a b c" for FMAs to read upon abc_valid_out high
+    //       c_valid_out: array of length FMA_COUNT, storing whether each FMA should read the "c" value or use its old "c" value
+    //       abc_valid_out: boolean that goes high when every FMA's input is ready to be read
 
     // Store fixed-point numbers to write into the a, b, and c wires of each FMA.
     logic [3 * WIDTH - 1 : 0] abc [FMA_COUNT - 1 : 0];
     // Store one-bit flags for whether c values should overwrite in the FMAs,
     // and for each FMA, whether its input has been prepared correctly from the BRAM.
     logic [FMA_COUNT - 1 : 0] c_valid, fma_prepared;
-    logic valid_out;
 
     enum {FILLING=0, WRITING=1} state;
 
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
             state <= FILLING;
-            valid_out <= 0;
+            abc_valid_out <= 0;
             for (int i = 0; i < FMA_COUNT; i = i + 1) begin
                 c_valid[i] <= 0;
                 fma_prepared[i] <= 0;
@@ -73,14 +77,16 @@ module fma_memory_buffer #(
                     end
                     if (fma_prepared + 1 == 0) begin // Check whether fma_prepared is all 1's.
                         state <= OUTPUTTING;
-                        valid_out <= 1;
+                        abc_out <= abc;
+                        c_valid_out <= c_valid;
+                        abc_valid_out <= 1;
                     end
                 end
 
                 OUTPUTTING: begin
-                    // Assume valid_out has just gone high. Reset everything.
+                    // Assume abc_valid_out has just gone high. Reset everything.
                     state <= FILLING;
-                    valid_out <= 0;
+                    abc_valid_out <= 0;
                     for (int i = 0; i < FMA_COUNT; i = i + 1) begin
                         c_valid[i] <= 0;
                         fma_prepared[i] <= 0;
@@ -90,7 +96,7 @@ module fma_memory_buffer #(
 
                 default: begin
                     state <= FILLING;
-                    valid_out <= 0;
+                    abc_valid_out <= 0;
                 end
             endcase
         end
