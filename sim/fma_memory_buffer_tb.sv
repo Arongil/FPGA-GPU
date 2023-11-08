@@ -9,10 +9,10 @@ module fma_memory_buffer_tb;
   //make logics for inputs and outputs!
   logic clk_in;
   logic rst_in;
-  logic [3*WIDTH-1:0] abc_in [FMA_COUNT-1:0];
-  logic [3-1:0] abc_valid_in [FMA_COUNT-1:0];
-  logic [3*WIDTH-1:0] abc_out [FMA_COUNT-1:0];
-  logic c_valid_out [FMA_COUNT-1:0];
+  logic [FMA_COUNT * 3*WIDTH-1 : 0] abc_in;
+  logic [FMA_COUNT * 3 - 1 : 0] abc_valid_in;
+  logic [FMA_COUNT * 3*WIDTH-1 : 0] abc_out;
+  logic [FMA_COUNT - 1 : 0] c_valid_out;
   logic abc_valid_out;
 
   fma_memory_buffer #(.WIDTH(WIDTH), .FMA_COUNT(FMA_COUNT)) uut  // uut = unit under test
@@ -47,22 +47,92 @@ module fma_memory_buffer_tb;
     //   2. Give valid input to all FMAs, but no c values
     //   3. Give valid input to all FMAs, including c value for one FMA
     //   4. Give valid input to all FMAs, including c value for all FMAs
+    //   5. Give valid input to some FMAs, but not to others.
     //
     // Implicitly, we are testing whether the memory buffer can take in new
     // data after outputting its old data.
     
     // TEST CASE #1
-    abc_valid_in[0] = 3'b110; // first  FMA gets a valid input (read everything except c)
-    abc_valid_in[1] = 3'b000; // second FMA (read nothing)
-    abc_valid_in[2] = 3'b000; // third  FMA (read nothing)
-    abc_valid_in[3] = 3'b000; // fourth FMA (read nothing)
-    abc_in[0] = 12'b0001_0010_0100; // 1 2 4 (should only read "a" and "b" values)
-    abc_in[1] = 12'b0001_0010_0100; // 1 2 4 (make sure it doesn't read these in!)
-    abc_in[2] = 12'b0001_0010_0100; // 1 2 4 (make sure it doesn't read these in!)
-    abc_in[3] = 12'b0001_0010_0100; // 1 2 4 (make sure it doesn't read these in!)
+    // First FMA gets a valid input (read everything except c), all other FMAs read nothing
+    //                 cba cba cba cba
+    abc_valid_in = 12'b000_000_000_011;
+    // All FMAs are able to read in a = 1, b = 2, c = 4.
+    abc_in = 48'b0001_0010_0100___0001_0010_0100___0001_0010_0100___0001_0010_0100;
 
-    $display("%12d", abc_out[0]);
+    #10;
 
+    // TEST CASE #2
+    // Let's give valid input to each FMA one by one, until the buffer outputs
+    abc_valid_in = 12'b000_000_011_000;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b000_011_000_000;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b011_000_000_000;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+
+    // Give the memory buffer one cycle to output its stored data.
+    #10;
+    // Give the memory buffer one cycle to reset its internals.
+    #10;
+
+    // TEST CASE #3
+    abc_valid_in = 12'b000_000_000_011;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b000_000_011_000;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b000_111_000_000; // set the c value to read in on this FMA!
+    abc_in = 48'b0000_0111_1000___1001_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b011_000_000_000;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+
+    // Give the memory buffer one cycle to output its stored data.
+    #10;
+    // Give the memory buffer one cycle to reset its internals.
+    #10;
+
+    // TEST CASE #4
+    abc_valid_in = 12'b000_000_000_111;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0001_0111_1000;
+    #10;
+    abc_valid_in = 12'b000_000_111_000;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0001_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b000_111_000_000; // set the c value to read in on this FMA!
+    abc_in = 48'b0000_0111_1000___0001_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b111_000_000_000;
+    abc_in = 48'b0001_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+
+    // Give the memory buffer one cycle to output its stored data.
+    #10;
+    // Give the memory buffer one cycle to reset its internals.
+    #10;
+
+    // TEST CASE #5
+    abc_valid_in = 12'b000_000_000_111;
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0001_0111_1000;
+    #10;
+    abc_valid_in = 12'b000_000_010_000; // give incomplete input to the second FMA
+    abc_in = 48'b0000_0111_1000___0000_0111_1000___0001_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b000_111_000_000; // set the c value to read in on this FMA!
+    abc_in = 48'b0000_0111_1000___0001_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+    abc_valid_in = 12'b111_000_000_000;
+    abc_in = 48'b0001_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
+    #10;
+
+    // Give the memory buffer one cycle to output its stored data.
+    #10;
+    // Give the memory buffer one cycle to reset its internals.
     #10;
 
     $finish;
