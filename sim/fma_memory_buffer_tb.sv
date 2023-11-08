@@ -98,16 +98,16 @@ module fma_memory_buffer_tb;
     #10;
 
     // TEST CASE #4
-    abc_valid_in = 12'b000_000_000_111;
+    abc_valid_in = 12'b000_000_000_111; // set the c value to read in on this FMA!
     abc_in = 48'b0000_0111_1000___0000_0111_1000___0000_0111_1000___0001_0111_1000;
     #10;
-    abc_valid_in = 12'b000_000_111_000;
+    abc_valid_in = 12'b000_000_111_000; // set the c value to read in on this FMA!
     abc_in = 48'b0000_0111_1000___0000_0111_1000___0001_0111_1000___0000_0111_1000;
     #10;
     abc_valid_in = 12'b000_111_000_000; // set the c value to read in on this FMA!
     abc_in = 48'b0000_0111_1000___0001_0111_1000___0000_0111_1000___0000_0111_1000;
     #10;
-    abc_valid_in = 12'b111_000_000_000;
+    abc_valid_in = 12'b111_000_000_000; // set the c value to read in on this FMA!
     abc_in = 48'b0001_0111_1000___0000_0111_1000___0000_0111_1000___0000_0111_1000;
     #10;
 
@@ -123,7 +123,7 @@ module fma_memory_buffer_tb;
     abc_valid_in = 12'b000_000_010_000; // give incomplete input to the second FMA
     abc_in = 48'b0000_0111_1000___0000_0111_1000___0001_0111_1000___0000_0111_1000;
     #10;
-    abc_valid_in = 12'b000_111_000_000; // set the c value to read in on this FMA!
+    abc_valid_in = 12'b000_111_000_000;
     abc_in = 48'b0000_0111_1000___0001_0111_1000___0000_0111_1000___0000_0111_1000;
     #10;
     abc_valid_in = 12'b111_000_000_000;
