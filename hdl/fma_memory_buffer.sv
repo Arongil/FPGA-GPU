@@ -7,7 +7,7 @@ module fma_memory_buffer #(
 ) (
     input wire clk_in,
     input wire rst_in,
-    input wire [FMA_COUNT * (3*WIDTH) - 1 : 0] abc_in,  // for each FMA i, abc_in[i] is laid out as "a b c" 
+    input wire [FMA_COUNT * (3*WIDTH) - 1 : 0] abc_in,
     input wire [FMA_COUNT * 3 - 1 : 0] abc_valid_in,
     output logic [FMA_COUNT * (3*WIDTH) - 1 : 0] abc_out,
     output logic [FMA_COUNT - 1 : 0] c_valid_out,
