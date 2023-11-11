@@ -1,4 +1,4 @@
-'timescale 1ns / 1ps
+`timescale 1ns / 1ps
 `default_nettype none
 
 `ifdef SYNTHESIS
@@ -8,17 +8,16 @@
 `endif  /* ! SYNTHESIS */
 
 module controller #(
+    parameter PROGRAM_FILE="program.mem",
     parameter PRIVATE_REG_WIDTH=10,  // number of bits per private register
     parameter PRIVATE_REG_COUNT=16,  // number of registers in the controller
     parameter INSTRUCTION_WIDTH=32,  // number of bits per instruction
-    parameter INSTRUCTION_COUNT=20,  // number of instructions in the program
+    parameter INSTRUCTION_COUNT=512, // number of instructions in the program
     parameter DATA_CACHE_WIDTH=16,   // number of bits per fixed-point number
-    parameter DATA_CACHE_DEPTH=4000  // number of addresses in the data cache
+    parameter DATA_CACHE_DEPTH=4096  // number of addresses in the data cache
 ) (
     input wire clk_in,
-    input wire rst_in,
-    output logic busy,
-    output logic next_instruction_index,
+    input wire rst_in
 );
     
     // CONTROLLER ------------------------------------------------------------
@@ -43,7 +42,7 @@ module controller #(
 
 
     // The controller is a state machine, with one state per command in the ISA.
-    enum {
+    enum logic[3:0] {
         // --------------------------------------------------------------------------------------
         // | 4 bit op code | 4 bit reg | 10 bit immediate | 4 bit reg | 4 bit reg | 6 bit extra |
         // --------------------------------------------------------------------------------------
@@ -66,7 +65,7 @@ module controller #(
     } state;
 
     // Private registers
-    localparam REG_DEPTH = $clog2(PRIVATE_REG_COUNT)
+    localparam REG_DEPTH = $clog2(PRIVATE_REG_COUNT);
     logic [PRIVATE_REG_WIDTH-1:0] registers [0:REG_DEPTH-1];
     logic compare_reg;
 
@@ -83,9 +82,9 @@ module controller #(
     // Read-only instruction buffer RAM (compiled program source)
     xilinx_true_dual_port_read_first_2_clock_ram #(
         .RAM_WIDTH(INSTRUCTION_WIDTH),
-        .RAM_DEPTH(INSTRUCTION_COUNT) 
+        .RAM_DEPTH(INSTRUCTION_COUNT),
         .RAM_PERFORMANCE("HIGH_PERFORMANCE"),     // Select "HIGH_PERFORMANCE"
-        .INIT_FILE(`FPATH(compiled_program.mem))  // Specify file to init RAM
+        .INIT_FILE(`FPATH(PROGRAM_FILE))  // Specify file to init RAM
     ) instruction_buffer (
         .clka(clk_in),                   // PORT 1
         .addra(instruction_index),       // Read address (current instruction)
@@ -99,24 +98,25 @@ module controller #(
         .clkb(clk_in),                   // PORT 2
         .addrb(prefetching_index),       // Read address (prefetched instruction)
         .doutb(prefetched_instruction),  // Output data (prefetched instruction)
-        .ena(state != IDLE),             // Enable RAM whenever the controller is not idle
+        .enb(state != IDLE),             // Enable RAM whenever the controller is not idle
         .regceb(1'b1),                   // Always enable output register for read-only RAM
         .web(1'b0),                      // Never write from read-only RAM
         .dinb(),                         // No input data
-        .rstb(rst_in),                   // Reset wire
+        .rstb(rst_in)                    // Reset wire
     );
 
     // Execute instructions
     logic instr_ready, just_used_prefetch;
-    logic [INSTRUCTION_WIDTH-1:0] instr;
+    logic [0:INSTRUCTION_WIDTH-1] instr;
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
             instruction_index <= 0;
             instr_ready <= 0;
+            instr <= 0;
             just_used_prefetch <= 0;
             state <= LOAD_INSTRUCTION;
         end else begin
-            case (state) begin
+            case (state)
                 IDLE: begin
                 end
 
