@@ -4,12 +4,13 @@
 
 import sys
 
-###############################################################
-#                                                             #
-# The functions below convert commands into machine code.     #
-# All register inputs are 4 bits. All immediates are 16 bits. #
-#                                                             #
-###############################################################
+###########################################################
+#                                                         #
+# The functions below convert commands into machine code. #
+# All registers are 4 bits. All immediates are 16 bits.   #
+# Registers and immediates are stored as little endian.   #
+#                                                         #
+###########################################################
 
 
 def nop():
@@ -22,13 +23,13 @@ def xor(a_reg, b_reg):
     return (0b0010 << 28) + (a_reg << 24) + (b_reg << 4)
 
 def addi(a_reg, b_reg, val):
-    return (0b0011 << 28) + (a_reg << 24) + (val << 20) + (b_reg << 4)
+    return (0b0011 << 28) + (a_reg << 24) + (val << 8) + (b_reg << 4)
 
 def bge(a_reg, b_reg):
     return (0b0100 << 28) + (a_reg << 24) + (b_reg << 4)
 
 def jump(jump_to_val):
-    return (0b0101 << 28) + (val << 20)
+    return (0b0101 << 28) + (jump_to_val << 8)
 
 
 ##########################################################
@@ -48,24 +49,27 @@ def str_to_isa(program: str):
     # ignore any comments, and remove extra whitespace.
     instructions = program.split("\n")[:-1]
     instructions = [i.split("#")[0].lower().strip() for i in instructions]
+    instructions.append("nop")  # an extra no_op at the end to avoid undefined
     
     isa_commands = []
     for instruction in instructions:
         args = instruction.split(" ")
         command = None
-        match args[0]:
+        op_name = args[0]
+        op_args = [int(arg) for arg in args[1:]]
+        match op_name:
             case "nop":
                 command = nop()
             case "end":
                 command = end()
             case "xor":
-                command = xor(args[1], args[2])
+                command = xor(op_args[0], op_args[1])
             case "addi":
-                command = addi(args[1], args[2], args[3])
+                command = addi(op_args[0], op_args[1], op_args[2])
             case "bge":
-                command = bge(args[1], args[2])
+                command = bge(op_args[0], op_args[1])
             case "jump":
-                command = jump(args[1])
+                command = jump(op_args[0])
             case unrecognized:
                 raise ValueError(f"Didn't recognize command {unrecognized}")
         # Format the 32 bit binary number as an 8 bit hex string
