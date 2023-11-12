@@ -3,7 +3,7 @@
 
 module controller_tb;
 
-    localparam PRIVATE_REG_WIDTH=10;
+    localparam PRIVATE_REG_WIDTH=16;
     localparam PRIVATE_REG_COUNT=16;
     localparam INSTRUCTION_WIDTH=32;
     localparam INSTRUCTION_COUNT=8;    // UPDATE TO MATCH PROGRAM_FILE
@@ -55,7 +55,7 @@ module controller_tb;
         //     4. PROGRAM_FILE="2-by-2-matrix-mult.mem"
         //     5. PROGRAM_FILE="mandelbrot-single-pixel.mem"
 
-        for (int cycle = 0; cycle < 20; cycle = cycle + 1) begin
+        for (int cycle = 0; cycle < 64; cycle = cycle + 1) begin
             $display("State %1d | Executing %4b", uut.state, uut.instr[0:3]);
             #10;
         end
