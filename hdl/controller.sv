@@ -65,9 +65,21 @@ module controller #(
     } state;
 
     // Private registers
-    localparam REG_DEPTH = $clog2(PRIVATE_REG_COUNT);
-    logic [PRIVATE_REG_WIDTH-1:0] registers [0:REG_DEPTH-1];
+    logic [PRIVATE_REG_WIDTH-1:0] registers [0:PRIVATE_REG_COUNT-1];
     logic compare_reg;
+
+    // Uncomment to track registers in GTKWave for debugging!
+    /*
+    logic [PRIVATE_REG_WIDTH-1:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7; // 8 more not displayed
+    assign reg0 = registers[0];
+    assign reg1 = registers[1];
+    assign reg2 = registers[2];
+    assign reg3 = registers[3];
+    assign reg4 = registers[4];
+    assign reg5 = registers[5];
+    assign reg6 = registers[6];
+    assign reg7 = registers[7];
+    */
 
     // Instruction tracking
     localparam INSTRUCTION_DEPTH = $clog2(INSTRUCTION_COUNT);
@@ -84,7 +96,7 @@ module controller #(
         .RAM_WIDTH(INSTRUCTION_WIDTH),
         .RAM_DEPTH(INSTRUCTION_COUNT),
         .RAM_PERFORMANCE("HIGH_PERFORMANCE"),     // Select "HIGH_PERFORMANCE"
-        .INIT_FILE(`FPATH(all-no-ops.mem))  // Specify file to init RAM
+        .INIT_FILE(`FPATH(isa-simple-for-loop.mem))  // Specify file to init RAM
     ) instruction_buffer (
         .clka(clk_in),                   // PORT 1
         .addra(instruction_index),       // Read address (current instruction)
@@ -111,10 +123,14 @@ module controller #(
     assign instr = current_instruction; // redesign once we do prefetching
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
-            instruction_index <= 0;
-            instr_ready <= 0;
-            just_used_prefetch <= 0;
             state <= LOAD_INSTRUCTION;
+            instr_ready <= 0;
+            instruction_index <= 0;
+            just_used_prefetch <= 0;
+            compare_reg <= 0;
+            for (int i = 0; i < PRIVATE_REG_COUNT; i = i + 1) begin
+                registers[i] <= 0;
+            end
         end else begin
             case (state)
                 IDLE: begin
@@ -146,6 +162,7 @@ module controller #(
 
                         OP_END: begin
                             state <= IDLE;
+                            instruction_index <= 0;
                         end
 
                         OP_XOR: begin
