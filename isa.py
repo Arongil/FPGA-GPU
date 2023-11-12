@@ -31,21 +31,22 @@ def jump(jump_to_val):
     return (0b0101 << 28) + (val << 20)
 
 
-#########################################################
-#                                                       #
-# The function below converts a comma-delimited string  #
-# into a machine code program that conforms to the ISA. #
-#                                                       #
-#########################################################
+##########################################################
+#                                                        #
+# The function below converts a newline-delimited string #
+# into a machine code program that conforms to the ISA.  #
+#                                                        #
+##########################################################
 
 def str_to_isa(program: str): 
     """
-    Given a comma-delimited string, whose inner arguments are
+    Given a newline-delimited string, whose inner arguments are
     space-delimited, return a string that complies with the ISA.
     """
 
-    # Split the input on commas and remove extra whitespace.
-    instructions = program.split(",")
+    # Split the input on newlines (ignoring empty last line)
+    # and remove extra whitespace.
+    instructions = program.split("\n")[:-1]
     instructions = [i.lower().strip() for i in instructions]
     
     isa_commands = []
