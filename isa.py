@@ -44,10 +44,10 @@ def str_to_isa(program: str):
     space-delimited, return a string that complies with the ISA.
     """
 
-    # Split the input on newlines (ignoring empty last line)
-    # and remove extra whitespace.
+    # Split the input on newlines (skipping empty last line),
+    # ignore any comments, and remove extra whitespace.
     instructions = program.split("\n")[:-1]
-    instructions = [i.lower().strip() for i in instructions]
+    instructions = [i.split("#")[0].lower().strip() for i in instructions]
     
     isa_commands = []
     for instruction in instructions:
