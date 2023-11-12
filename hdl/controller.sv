@@ -55,7 +55,7 @@ module controller #(
         OP_BGE     = 4'b0100,  // bge(a_reg, b_reg):
                                //    Sets compare_reg to 1 iff a_reg >= b_reg
         OP_JUMP    = 4'b0101   // jump(jump_to):
-                               //    Jumps to instruction at immediate index jump_to.
+                               //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
     } isa;
 
     enum {
@@ -161,8 +161,10 @@ module controller #(
                         end
 
                         OP_JUMP: begin
-                            instr_ready <= 0; // force two-cycle read for new instruction_index
-                            instruction_index <= instr[8:23];
+                            if (compare_reg) begin
+                                instr_ready <= 0; // force two-cycle read for new instruction_index
+                                instruction_index <= instr[8:23];
+                            end
                         end
 
                         default: begin
