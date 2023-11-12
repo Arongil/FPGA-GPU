@@ -9,7 +9,7 @@
 
 module controller #(
     parameter PROGRAM_FILE="program.mem",
-    parameter PRIVATE_REG_WIDTH=10,  // number of bits per private register
+    parameter PRIVATE_REG_WIDTH=16,  // number of bits per private register
     parameter PRIVATE_REG_COUNT=16,  // number of registers in the controller
     parameter INSTRUCTION_WIDTH=32,  // number of bits per instruction
     parameter INSTRUCTION_COUNT=512, // number of instructions in the program
@@ -43,9 +43,9 @@ module controller #(
 
     // The controller is a state machine, with one state per command in the ISA.
     enum logic[3:0] {
-        // --------------------------------------------------------------------------------------
-        // | 4 bit op code | 4 bit reg | 10 bit immediate | 4 bit reg | 4 bit reg | 6 bit extra |
-        // --------------------------------------------------------------------------------------
+        // ------------------------------------------------------------------------
+        // | 4 bit op code | 4 bit reg | 16 bit immediate | 4 bit reg | 4 bit reg |
+        // ------------------------------------------------------------------------
         OP_NOP     = 4'b0000,  // no op
         OP_END     = 4'b0001,  // end execution 
         OP_XOR     = 4'b0010,  // xor(a_reg, b_reg):
@@ -55,7 +55,7 @@ module controller #(
         OP_BGE     = 4'b0100,  // bge(a_reg, b_reg):
                                //    Sets compare_reg to 1 iff a_reg >= b_reg
         OP_JUMP    = 4'b0101   // jump(jump_to):
-                               //    Jumps to instruction at index jump_to.
+                               //    Jumps to instruction at immediate index jump_to.
     } isa;
 
     enum {
@@ -137,9 +137,9 @@ module controller #(
                     // Implement the ISA
                     case (instr[0:3])
 
-                        // --------------------------------------------------------------------------------------
-                        // | 4 bit op code | 4 bit reg | 10 bit immediate | 4 bit reg | 4 bit reg | 6 bit extra |
-                        // --------------------------------------------------------------------------------------
+                        // ------------------------------------------------------------------------
+                        // | 4 bit op code | 4 bit reg | 16 bit immediate | 4 bit reg | 4 bit reg |
+                        // ------------------------------------------------------------------------
 
                         OP_NOP: begin
                         end
@@ -149,20 +149,20 @@ module controller #(
                         end
 
                         OP_XOR: begin
-                            registers[instr[4:7]] <= registers[instr[4:7]] ^ registers[instr[18:21]];
+                            registers[instr[4:7]] <= registers[instr[4:7]] ^ registers[instr[24:27]];
                         end
 
                         OP_ADDI: begin
-                            registers[instr[4:7]] <= instr[8:17] + registers[instr[18:21]];
+                            registers[instr[4:7]] <= instr[8:23] + registers[instr[24:27]];
                         end
 
                         OP_BGE: begin
-                            compare_reg <= registers[instr[4:7]] >= registers[instr[18:21]];
+                            compare_reg <= registers[instr[4:7]] >= registers[instr[24:27]];
                         end
 
                         OP_JUMP: begin
                             instr_ready <= 0; // force two-cycle read for new instruction_index
-                            instruction_index <= instr[8:17];
+                            instruction_index <= instr[8:23];
                         end
 
                         default: begin
