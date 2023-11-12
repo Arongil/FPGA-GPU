@@ -84,7 +84,7 @@ module controller #(
         .RAM_WIDTH(INSTRUCTION_WIDTH),
         .RAM_DEPTH(INSTRUCTION_COUNT),
         .RAM_PERFORMANCE("HIGH_PERFORMANCE"),     // Select "HIGH_PERFORMANCE"
-        .INIT_FILE(`FPATH(PROGRAM_FILE))  // Specify file to init RAM
+        .INIT_FILE(`FPATH(all-no-ops.mem))  // Specify file to init RAM
     ) instruction_buffer (
         .clka(clk_in),                   // PORT 1
         .addra(instruction_index),       // Read address (current instruction)
@@ -108,11 +108,11 @@ module controller #(
     // Execute instructions
     logic instr_ready, just_used_prefetch;
     logic [0:INSTRUCTION_WIDTH-1] instr;
+    assign instr = current_instruction; // redesign once we do prefetching
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
             instruction_index <= 0;
             instr_ready <= 0;
-            instr <= 0;
             just_used_prefetch <= 0;
             state <= LOAD_INSTRUCTION;
         end else begin
@@ -127,9 +127,9 @@ module controller #(
                     instr_ready <= 1'b1;
                     if (instr_ready) begin
                         state <= EXECUTE_INSTRUCTION;
-                        instr <= current_instruction;
                         instruction_index <= instruction_index + 1'b1;
                         // TODO: if instr is not JUMP, prefetch next instruction
+                        //       instr <= current_instruction;
                     end
                 end
 
@@ -161,7 +161,7 @@ module controller #(
                         end
 
                         OP_JUMP: begin
-                            //instr_ready <= 0;  // force two-cycle read for new instruction_index
+                            instr_ready <= 0; // force two-cycle read for new instruction_index
                             instruction_index <= instr[8:17];
                         end
 
@@ -170,16 +170,17 @@ module controller #(
                         end
                     endcase 
 
-                    // If the instruction wasn't a jump, immediately execute the next instruction.
-                    //if (instr[0:3] != OP_JUMP) begin
-                    //    state <= EXECUTE_INSTRUCTION;
-                    //    instr <= just_used_prefetch ? current_instruction : prefetched_instruction;
-                    //    instruction_index <= instruction_index + 1;
-                    //    // ^^^ won't work yet -- need to persist instr_index two cycles for BRAM
-                    //end else begin
-                    state <= LOAD_INSTRUCTION;
-                    instr_ready <= 0; // TEMP -- remove when using prefetching
-                    //end
+                    if (instr[0:3] != OP_END) begin
+                        // If the instruction wasn't a jump, immediately execute the next instruction.
+                        //if (instr[0:3] != OP_JUMP) begin
+                        //    state <= EXECUTE_INSTRUCTION;
+                        //    instr <= just_used_prefetch ? current_instruction : prefetched_instruction;
+                        //    instruction_index <= instruction_index + 1;
+                        //    // ^^^ won't work yet -- need to persist instr_index two cycles for BRAM
+                        //end else begin
+                        state <= LOAD_INSTRUCTION; // TEMP -- remove when using prefetching and instead directly go to next instruction
+                        //end
+                    end
                 end
 
                 default: begin

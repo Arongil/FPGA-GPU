@@ -55,7 +55,7 @@ module controller_tb;
         //     4. PROGRAM_FILE="2-by-2-matrix-mult.mem"
         //     5. PROGRAM_FILE="mandelbrot-single-pixel.mem"
 
-        for (int cycle = 0; cycle < 100; cycle = cycle + 1) begin
+        for (int cycle = 0; cycle < 20; cycle = cycle + 1) begin
             $display("State %1d | Executing %4b", uut.state, uut.instr[0:3]);
             #10;
         end
