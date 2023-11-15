@@ -24,7 +24,6 @@ FMA_LOAD instruction (also doubles as a start-compute instruction)
     until ADDR + LENGTH, with SPACING between each value. 
 - Memory completes the FMA_LOAD, signals idle back to controller
 - FMA read buffer is full, it flushes its data to the FMA block on the next cycle
-- Controller pulls the compute flag high on the FMA block, computation starts
 FMA_STORE instruction
 - Controller gets a FMA_STORE instruction from instruction cache
 - Controller pulls the FMA write buffer's valid flag high. In one cycle, the output from all FMA blocks
