@@ -1,0 +1,6 @@
+xor 0 0     # zero out register 0
+addi 1 0 7  # set register 1 to 7
+addi 0 0 1  # increment register 0 by 1
+bge 1 0     # check whether 15 >= register 0
+jump 2      # if so, loop back to third instruction
+end         # finish after the loop is complete
