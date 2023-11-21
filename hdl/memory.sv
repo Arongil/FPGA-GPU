@@ -4,10 +4,11 @@
 // 
 
 module memory #(
+    parameter MEMORY_BYTES = 36000,
     parameter FMA_COUNT = 2,  // number of FMAs to prepare data for in a simultaneous read
     parameter WORD_WIDTH = 16,  // number of bits per number aka width of a word
     parameter LINE_WIDTH = 96,  // width of a line, FMA_COUNT * 3 * WORD_WIDTH = 2 * 3 * 16 = 96
-    parameter ADDR_LENGTH = $clog2(375),  // 96 bits in a line. 36kb/96 = 375
+    parameter ADDR_LENGTH = $clog2(36000 / 96),  // 96 bits in a line. 36kb/96 = 375
     parameter INSTRUCTION_WIDTH = 32      // number of bits per instruction
 ) (
     // Use first 4-bit reg for loading immediate. 4'b0 means loading 0th word in the line, 4'b1 means 1st, ... , 4'b101 means 5th 
@@ -44,9 +45,11 @@ module memory #(
                                //    Set memory address to the immediate val in the data cache.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_LOADB   = 4'b1000,  // loadb(val):
+        OP_SENDL   = 4'b1000,  // sendl():
+                               //    Send loaded line to BRAM at memory address.
+        OP_LOADB   = 4'b1001,  // loadb(val):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
-        OP_WRITEB  = 4'b1001   // writeb(val):
+        OP_WRITEB  = 4'b1010   // writeb(val):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
     } isa;
 
@@ -97,7 +100,7 @@ module memory #(
 
                     // Load immediate at address
                     OP_LOADI: begin
-                        idle_out <= 0;
+                        idle_out <= 1;
 
                         // instr_in[4:7] contain the bits for which word to set
                         if (instr_in[4:7] < 6) begin
@@ -118,7 +121,7 @@ module memory #(
                         bram_read <= 0;
                         bram_write <= 0;
                     end
-                    4'b1110: begin
+                    OP_SENDL: begin
                         // NEW INSTRUCTION: aftering putting 6 words on the line, send a new instruction to flush line into BRAM
                         bram_in[LINE_WIDTH - 1 : 0] <= bram_temp_in[LINE_WIDTH - 1 : 0];
                         bram_read <= 1;
@@ -126,16 +129,18 @@ module memory #(
                         bram_valid_in <= 6'b0;
                         reset_bram_read <= 1;
                     end
-                    4'b1010: begin
+                    OP_LOADB: begin
                         // We assume that the buffer will keep the valid flag high until memory reads the content and go idle
                         bram_in[LINE_WIDTH - 1 : 0] <= buffer_read_in[LINE_WIDTH - 1 : 0];
+                        addr <= instr_in[8:23];  // set addr to immediate
                         idle_out <= 0;
                         bram_read <= 1;
                         bram_write <= 0;
                         reset_bram_read <= 1;
                     end
-                    4'b1100: begin
+                    OP_WRITEB: begin
                         write_flag <= 1;
+                        addr <= instr_in[8:23];  // set addr to immediate
                         idle_out <= 0;
                         bram_read <= 0;
                         bram_write <= 1;
@@ -149,7 +154,7 @@ module memory #(
             else if (write_flag) begin
                 if (cycle_ctr == 2'b01) begin
                     abc_out <= bram_out;
-                    abc_valid_out <= 1;
+                    abc_valid_out <= 96'h1111_1111_0000_1111_1111_0000; // no c_valid
                     bram_temp_in <= 0;
                     bram_in <= 0;
                     bram_valid_in <= 0;
@@ -187,7 +192,7 @@ module memory #(
 
     xilinx_true_dual_port_read_first_2_clock_ram #(
         .RAM_WIDTH(LINE_WIDTH),                       // Specify RAM data width
-        .RAM_DEPTH(WORD_WIDTH),                     // Specify RAM depth (number of entries)
+        .RAM_DEPTH(36000 / 90),                       // Specify RAM depth (number of entries)
         .RAM_PERFORMANCE("HIGH_PERFORMANCE"), // Select "HIGH_PERFORMANCE" or "LOW_LATENCY"
         .INIT_FILE("")                        // Specify name/location of RAM initialization file if using one (leave blank if not)
     ) memory_BRAM (
@@ -199,9 +204,9 @@ module memory #(
         .clkb(),     // Port B clock
         .wea(bram_read),       // Port A write enable
         .web(),       // Port B write enable
-        .ena(1),       // Port A RAM Enable, for additional power savings, disable port when not in use
+        .ena(1'b1),       // Port A RAM Enable, for additional power savings, disable port when not in use
         .enb(),       // Port B RAM Enable, for additional power savings, disable port when not in use
-        .rsta(0),     // Port A output reset (does not affect memory contents)
+        .rsta(1'b0),     // Port A output reset (does not affect memory contents)
         .rstb(),     // Port B output reset (does not affect memory contents)
         .regcea(bram_write), // Port A output register enable
         .regceb(), // Port B output register enable
