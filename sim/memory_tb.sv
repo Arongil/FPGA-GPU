@@ -92,66 +92,41 @@ module memory_tb;
     instr_in = 32'b0110___0000___0000_0001_0111_1000___0000___0000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-
-    #10;
-
     // TEST CASE #1
     // Give instructions that fill the line with that address
-    instr_in = 32'b0111___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
+    instr_in = 32'b0111___0000___1000_1000_1000_1000___0000___0000;
     #10;
     instr_in = 32'b0111___0001___1000_1000_1000_0111___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0010___1000_1000_1000_0110___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0011___1000_1000_1000_0101___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0100___1000_1000_1000_0100___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0101___1000_1000_1000_0011___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b1110___0110___1000_1000_1000_0011___0000___0000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
 
     // Give the BRAMs 2 cycles to take in the data
-    #20;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
 
     // TEST CASE #2
     // Give an instruction that asks the memory to take the line at this address and fill the fma_read_buffer with it
     instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-    #20; // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
 
     // TEST CASE #3
     // Give an instruction that asks the memory to take a line from the fma_write_buffer and fill in the line at the address with it
@@ -159,18 +134,20 @@ module memory_tb;
     buffer_read_in = 96'hA000_A000_A000_A000_A000_A000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-    #10;
 
     // Now take that line out and make sure it is what we put in
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10; // 2 NOPs
     instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-    #20; // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
 
 //
 //
@@ -180,66 +157,41 @@ module memory_tb;
     instr_in = 32'b0110___0000___0000_0101_0111_1000___0000___0000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-
-    #10;
 
     // TEST CASE #1
     // Give instructions that fill the line with that address
     instr_in = 32'b0111___0000___1100_1000_1000_1000___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0001___1100_1000_1000_0111___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0010___1100_1000_1000_0110___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0011___1100_1000_1000_0101___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0100___1100_1000_1000_0100___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b0111___0101___1100_1000_1000_0011___0000___0000;
-    instr_valid_in = 1;
-    #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
     #10;
     instr_in = 32'b1110___0110___1100_1000_1000_0011___0000___0000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-
+    
     // Give the BRAMs 2 cycles to take in the data
-    #20;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
 
     // TEST CASE #2
     // Give an instruction that asks the memory to take the line at this address and fill the fma_read_buffer with it
     instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-    #20; // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
 
     // TEST CASE #3
     // Give an instruction that asks the memory to take a line from the fma_write_buffer and fill in the line at the address with it
@@ -247,19 +199,23 @@ module memory_tb;
     buffer_read_in = 96'hAA00_A000_A000_A000_A000_A000;
     instr_valid_in = 1;
     #10;
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-    #10;
 
     // Now take that line out and make sure it is what we put in
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10; // 2 NOPs
     instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
     #10;
+    // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+
     instr_in = 32'b0;
     instr_valid_in = 0;
-    #20; // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
-
     #100;
     $finish;
 

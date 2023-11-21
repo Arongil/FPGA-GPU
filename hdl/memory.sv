@@ -87,6 +87,46 @@ module memory #(
             if (instr_valid_in) begin
                 case (instr_in[0:3])
 
+                    OP_NOP: begin
+                        // Hanfei: factor out these if statements to be cleaner
+                        if (write_flag) begin
+                            if (cycle_ctr == 2'b01) begin
+                                abc_out <= bram_out;
+                                abc_valid_out <= 1;
+                                bram_temp_in <= 0;
+                                bram_in <= 0;
+                                bram_valid_in <= 0;
+                                idle_out <= 1;
+                                load_imm_error <= 0;
+                                op_code_error <= 0;
+                                cycle_ctr <= 0;
+                                write_flag <= 0;
+                                bram_read <= 0;
+                                bram_write <= 0;
+                                pull_abc_valid_out_low_flag <= 1;
+                            end else begin
+                                cycle_ctr <= cycle_ctr + 1;
+                                bram_read <= 0;
+                                bram_write <= 0;
+                            end
+                        end 
+                        else if (reset_bram_read) begin
+                            bram_temp_in <= 0;
+                            bram_in <= 0;
+                            bram_valid_in <= 0;
+                            idle_out <= 1;
+                            load_imm_error <= 0;
+                            op_code_error <= 0;
+                            bram_read <= 0;
+                            reset_bram_read <= 0;
+                            abc_valid_out <= 0;
+                        end
+                        else if (pull_abc_valid_out_low_flag) begin
+                            abc_valid_out <= 0;
+                            pull_abc_valid_out_low_flag <= 0;
+                        end
+                    end
+
                     // Set Memory Address (sets addr)
                     OP_SMA: begin 
                         addr <= instr_in[8:23];
@@ -143,44 +183,6 @@ module memory #(
                     default: op_code_error <= 1;
                 endcase
                 abc_valid_out <= 0;
-            end
-
-            // Hanfei: factor out these if statements to be cleaner
-            else if (write_flag) begin
-                if (cycle_ctr == 2'b01) begin
-                    abc_out <= bram_out;
-                    abc_valid_out <= 1;
-                    bram_temp_in <= 0;
-                    bram_in <= 0;
-                    bram_valid_in <= 0;
-                    idle_out <= 1;
-                    load_imm_error <= 0;
-                    op_code_error <= 0;
-                    cycle_ctr <= 0;
-                    write_flag <= 0;
-                    bram_read <= 0;
-                    bram_write <= 0;
-                    pull_abc_valid_out_low_flag <= 1;
-                end else begin
-                    cycle_ctr <= cycle_ctr + 1;
-                    bram_read <= 0;
-                    bram_write <= 0;
-                end
-            end 
-            else if (reset_bram_read) begin
-                bram_temp_in <= 0;
-                bram_in <= 0;
-                bram_valid_in <= 0;
-                idle_out <= 1;
-                load_imm_error <= 0;
-                op_code_error <= 0;
-                bram_read <= 0;
-                reset_bram_read <= 0;
-                abc_valid_out <= 0;
-            end
-            else if (pull_abc_valid_out_low_flag) begin
-                abc_valid_out <= 0;
-                pull_abc_valid_out_low_flag <= 0;
             end
         end
     end
