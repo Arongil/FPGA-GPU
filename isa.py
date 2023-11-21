@@ -31,6 +31,20 @@ def bge(a_reg, b_reg):
 def jump(jump_to_val):
     return (0b0101 << 28) + (jump_to_val << 8)
 
+def sma(val):
+    return (0b0110 << 28) + (val << 8)
+
+def loadi(a_reg, val):
+    return (0b0111 << 28) + (a_reg << 24) + (val << 8)
+
+def sendl():
+    return (0b1000 << 28)
+
+def loadb(val):
+    return (0b1001 << 28) + (val << 8)
+
+def writeb(val):
+    return (0b1010 << 28) + (val << 8)
 
 ##########################################################
 #                                                        #
@@ -63,13 +77,23 @@ def str_to_isa(program: str):
             case "end":
                 command = end()
             case "xor":
-                command = xor(op_args[0], op_args[1])
+                command = xor(*op_args)
             case "addi":
-                command = addi(op_args[0], op_args[1], op_args[2])
+                command = addi(*op_args)
             case "bge":
-                command = bge(op_args[0], op_args[1])
+                command = bge(*op_args)
             case "jump":
-                command = jump(op_args[0])
+                command = jump(*op_args)
+            case "sma":
+                command = sma(*op_args)
+            case "loadi":
+                command = loadi(*op_args)
+            case "sendl":
+                command = sendl()
+            case "loadb":
+                command = loadb(*op_args)
+            case "writeb":
+                command = writeb(*op_args)
             case unrecognized:
                 raise ValueError(f"Didn't recognize command {unrecognized}")
         # Format the 32 bit binary number as an 8 bit hex string
