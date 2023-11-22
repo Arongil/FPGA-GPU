@@ -32,3 +32,21 @@ FMA_STORE instruction
 - Controller sends a request to memory to read the FMA write buffer and store the values starting at ADDR 
     until ADDR + LENGTH, with SPACING between each value. 
 - Memory completes the FMA_STORE, signals idle back to the controller
+
+Next steps:
+- (Done) Tb: read in everything then do operations
+- Modify insert line command with indication of where c should read
+    - Output c_read_loc 2 bits from memory
+- Modify insert line command to tell write buffer if it should write back to fma blocks for c
+    - Output write_buffer_to_fma_flag from memory to write buffer
+- Modify fma blocks to include valid out
+- Modify fma blocks to take input and valid in from fma write buffer
+- Modify fma write buffer to take in write_buffer_to_fma_flag from memory and output c and c_valid
+- New wires
+    - Memory to fma block to tell it which c values to use
+    - Memory to fma write buffer to tell it to send c value to fma block
+    - Fma block to fma write buffer, valid out
+    - Fma write buffer to fma block to return previous c value, + c_valid wire
+- How to make sure fma write buffer and fma block are talking about the same variable: store everything left to right in same order. 
+- Note? Remember it’s SIMD so maybe only one valid out is needed from fma blocks
+

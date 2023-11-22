@@ -17,6 +17,8 @@ module memory_tb;
   logic instr_valid_in;
   logic [LINE_WIDTH - 1 : 0] abc_out;
   logic abc_valid_out;
+  logic [31:0] addr1;
+  logic [31:0] addr2;
 
   memory #(.FMA_COUNT(FMA_COUNT), 
            .WORD_WIDTH(WORD_WIDTH), 
@@ -50,13 +52,10 @@ module memory_tb;
     #10;
 
     // We'll perform the following test cases:
-    //   (pre_lim, can't check directly) Give an instruction that gives an address
     //   1. Give instructions that fill the line with that address
     //   2. Give an instruction that asks the memory to take the line at this address and fill the fma_read_buffer with it
     //   3. Give an instruction that asks the memory to take a line from the fma_write_buffer and fill in the line at the address with it
     //
-    
-    // OP codes: 
     // enum logic[3:0] {
     //     // ------------------------------------------------------------------------
     //     // | 4 bit op code | 4 bit reg | 16 bit immediate | 4 bit reg | 4 bit reg |
@@ -75,9 +74,11 @@ module memory_tb;
     //                            //    Set memory address to the immediate val in the data cache.
     //     OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
     //                            //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-    //     OP_LOADB   = 4'b1000,  // loadb(val):
+    //     OP_SENDL   = 4'b1110,  // sendl():
+    //                            //    Send loaded line to BRAM at memory address.
+    //     OP_LOADB   = 4'b1010,  // loadb(val):
     //                            //    Load FMA buffer contents into the immediate addr in the data cache.
-    //     OP_WRITEB  = 4'b1001   // writeb(val):
+    //     OP_WRITEB  = 4'b1100   // writeb(val):
     //                            //    Write contents of immediate addr in the data cache to FMA blocks. 
     // } isa;
     // Use first 4-bit reg for loading immediate. 4'b0 means loading 0th word in the line, 4'b1 means 1st, ... , 4'b101 means 5th 
@@ -88,11 +89,16 @@ module memory_tb;
     NOTE: ADDRESS IS ONLY 9 BITS OUT OF THE 16 IMMEDIATE BITS
     */
 
+    assign addr1 = 32'b0110___0000___0000_0001_0111_1000___0000___0000;
+    assign addr2 = 32'b0110___0000___0000_0001_1111_1100___0000___0000;
+
+    /* Begin initial data storage
+    */
+
     // Prelim -- give an address to the BRAM
-    instr_in = 32'b0110___0000___0000_0001_0111_1000___0000___0000;
+    instr_in = addr1;
     instr_valid_in = 1;
     #10;
-    // TEST CASE #1
     // Give instructions that fill the line with that address
     instr_valid_in = 1;
     instr_in = 32'b0111___0000___1000_1000_1000_1000___0000___0000;
@@ -114,10 +120,44 @@ module memory_tb;
     // Give the BRAMs 2 cycles to take in the data
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
+
+    // Prelim -- give another address to the BRAM
+    instr_in = addr2;
+    instr_valid_in = 1;
+    #10;
+    // Give instructions that fill the line with that address
+    instr_valid_in = 1;
+    instr_in = 32'b0111___0000___1000_1000_1000_1000___0000___0000;
+    #10;
+    instr_in = 32'b0111___0001___1000_1000_1000_0111___0000___0000;
+    #10;
+    instr_in = 32'b0111___0010___1000_1000_1000_0110___0000___0000;
+    #10;
+    instr_in = 32'b0111___0011___1000_1000_1000_0101___0000___0000;
+    #10;
+    instr_in = 32'b0111___0100___1000_1000_1000_0100___0000___0000;
+    #10;
+    instr_in = 32'b0111___0101___1000_1000_1000_0011___0000___0000;
+    #10;
+    instr_in = 32'b1110___0110___1000_1000_1000_0011___0000___0000;
+    instr_valid_in = 1;
+    #10;
+
+    // Give the BRAMs 2 cycles to take in the data
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
 
-    // TEST CASE #2
+    /* End initial data storage
+    */
+
+    /* Begin tests on first address
+    */
+
+     // Prelim -- give an address to the BRAM
+    instr_in = addr1;
+    instr_valid_in = 1;
+    #10;
+
     // Give an instruction that asks the memory to take the line at this address and fill the fma_read_buffer with it
     instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
@@ -125,10 +165,7 @@ module memory_tb;
     // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
-    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
-    #10;
 
-    // TEST CASE #3
     // Give an instruction that asks the memory to take a line from the fma_write_buffer and fill in the line at the address with it
     instr_in = 32'b1010___0000___1000_1000_1000_1000___0000___0000;
     buffer_read_in = 96'hA000_A000_A000_A000_A000_A000;
@@ -137,24 +174,68 @@ module memory_tb;
 
     // Now take that line out and make sure it is what we put in
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
-    #10;
-    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
-    #10; // 2 NOPs
+    #10; // extra NOP
     instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
     #10;
     // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
+
+    /* End tests on first address
+    */
+
+    /* Begin tests on second address
+    */
+
+    // Prelim -- give an address to the BRAM
+    instr_in = addr2;
+    instr_valid_in = 1;
+    #10;
+
+    // Give an instruction that asks the memory to take the line at this address and fill the fma_read_buffer with it
+    instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
+    instr_valid_in = 1;
+    #10;
+    // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10;
+    
+    // Give an instruction that asks the memory to take a line from the fma_write_buffer and fill in the line at the address with it
+    instr_in = 32'b1010___0000___1000_1000_1000_1000___0000___0000;
+    buffer_read_in = 96'hAA00_A000_A000_A000_A000_A000;
+    instr_valid_in = 1;
+    #10;
+
+    // Now take that line out and make sure it is what we put in
+    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    #10; // stall
+    instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
+    instr_valid_in = 1;
+    #10;
+    // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
 
-//
-//
-//
+    /* End tests on second address
+    */
+
+    instr_in = 32'b0;
+    instr_valid_in = 0;
+    #100;
+    $finish;
+
+  end
+
+endmodule // fma_memory_buffer_tb
+
+`default_nettype wire
+
+/*
+Discarded/redundent tests
 
     // Prelim -- give an address to the BRAM
-    instr_in = 32'b0110___0000___0000_0101_0111_1000___0000___0000;
+    instr_in = addr2;
     instr_valid_in = 1;
     #10;
 
@@ -179,8 +260,8 @@ module memory_tb;
     // Give the BRAMs 2 cycles to take in the data
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
-    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
-    #10;
+    // instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    // #10;
 
     // TEST CASE #2
     // Give an instruction that asks the memory to take the line at this address and fill the fma_read_buffer with it
@@ -190,8 +271,8 @@ module memory_tb;
     // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
-    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
-    #10;
+    // instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    // #10;
 
     // TEST CASE #3
     // Give an instruction that asks the memory to take a line from the fma_write_buffer and fill in the line at the address with it
@@ -203,24 +284,19 @@ module memory_tb;
     // Now take that line out and make sure it is what we put in
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
-    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
-    #10; // 2 NOPs
+    // instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    // #10; // 2 NOPs
     instr_in = 32'b1100___0000___1000_1000_1000_1000___0000___0000;
     instr_valid_in = 1;
     #10;
     // 2 cycles to get stuff out of the bram, 1 cycle to put stuff into buffer
     instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
     #10;
-    instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
-    #10;
+    // instr_in = 32'b0000___1000___0000_0000_0000_0000___0000___0000;
+    // #10;
 
-    instr_in = 32'b0;
-    instr_valid_in = 0;
-    #100;
-    $finish;
-
-  end
-
-endmodule // fma_memory_buffer_tb
-
-`default_nettype wire
+  //
+  //
+  //
+  //
+*/

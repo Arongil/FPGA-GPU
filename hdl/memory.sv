@@ -44,9 +44,12 @@ module memory #(
                                //    Set memory address to the immediate val in the data cache.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_LOADB   = 4'b1000,  // loadb(val):
+        OP_SENDL   = 4'b1110,  // sendl():
+                               //    Send loaded line to BRAM at memory address. 
+                               //    The first reg will take on the following values: 4'b0000 if c is default value, 4'b0001 if read c from mem, 4'b0010 if read c from write buffer
+        OP_LOADB   = 4'b1010,  // loadb(val):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
-        OP_WRITEB  = 4'b1001   // writeb(val):
+        OP_WRITEB  = 4'b1100   // writeb(val):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
     } isa;
 
@@ -56,16 +59,11 @@ module memory #(
     logic [LINE_WIDTH - 1 : 0] bram_temp_in;
     logic [LINE_WIDTH - 1 : 0] bram_in;
     logic [FMA_COUNT * 3 - 1 : 0] bram_valid_in;
-    logic [LINE_WIDTH - 1 : 0] bram_out;
     logic load_imm_error;
     logic op_code_error;
-    logic [1:0] cycle_ctr; // 2 cycles after the last instr_valid_in, BRAM will have processed stuff and we can go into idle state
-    logic write_flag; // indicates a write operation from the BRAM to buffer
     logic bram_read;
     logic bram_write;
     logic reset_bram_read; // reset logics after putting one line into BRAM from system
-    logic pull_abc_valid_out_low_flag; // will write a state machine later to make this less painful
-
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
             idle_out <= 1;
@@ -73,44 +71,19 @@ module memory #(
             bram_temp_in <= 0;
             bram_in <= 0;
             bram_valid_in <= 0;
-            abc_out <= 0;
             abc_valid_out <= 0;
             load_imm_error <= 0;
             op_code_error <= 0;
-            cycle_ctr <= 0;
-            write_flag <= 0;
             bram_read <= 0;
             bram_write <= 0;
             reset_bram_read <= 0;
-            pull_abc_valid_out_low_flag <= 0;
         end else begin
             if (instr_valid_in) begin
                 case (instr_in[0:3])
 
                     OP_NOP: begin
                         // Hanfei: factor out these if statements to be cleaner
-                        if (write_flag) begin
-                            if (cycle_ctr == 2'b01) begin
-                                abc_out <= bram_out;
-                                abc_valid_out <= 1;
-                                bram_temp_in <= 0;
-                                bram_in <= 0;
-                                bram_valid_in <= 0;
-                                idle_out <= 1;
-                                load_imm_error <= 0;
-                                op_code_error <= 0;
-                                cycle_ctr <= 0;
-                                write_flag <= 0;
-                                bram_read <= 0;
-                                bram_write <= 0;
-                                pull_abc_valid_out_low_flag <= 1;
-                            end else begin
-                                cycle_ctr <= cycle_ctr + 1;
-                                bram_read <= 0;
-                                bram_write <= 0;
-                            end
-                        end 
-                        else if (reset_bram_read) begin
+                        if (reset_bram_read) begin
                             bram_temp_in <= 0;
                             bram_in <= 0;
                             bram_valid_in <= 0;
@@ -119,11 +92,13 @@ module memory #(
                             op_code_error <= 0;
                             bram_read <= 0;
                             reset_bram_read <= 0;
-                            abc_valid_out <= 0;
                         end
-                        else if (pull_abc_valid_out_low_flag) begin
+                        else if (bram_write == 1) begin
+                            bram_write <= 0;
+                            abc_valid_out <= 1;
+                        end
+                        else if (abc_valid_out == 1) begin
                             abc_valid_out <= 0;
-                            pull_abc_valid_out_low_flag <= 0;
                         end
                     end
 
@@ -133,6 +108,15 @@ module memory #(
                         idle_out <= 1;  // WHY NOT RETURN IDLE_OUT <= 1? Resolved
                         bram_read <= 0;
                         bram_write <= 0;
+                        abc_valid_out <= 0;
+                        if (reset_bram_read) begin
+                            bram_temp_in <= 0;
+                            bram_in <= 0;
+                            bram_valid_in <= 0;
+                            load_imm_error <= 0;
+                            op_code_error <= 0;
+                            reset_bram_read <= 0;
+                        end
                     end
 
                     // Load immediate at address
@@ -157,32 +141,37 @@ module memory #(
                         end
                         bram_read <= 0;
                         bram_write <= 0;
+                        abc_valid_out <= 0;
                     end
-                    4'b1110: begin
+                    OP_SENDL: begin
                         // NEW INSTRUCTION: aftering putting 6 words on the line, send a new instruction to flush line into BRAM
                         bram_in[LINE_WIDTH - 1 : 0] <= bram_temp_in[LINE_WIDTH - 1 : 0];
                         bram_read <= 1;
                         bram_write <= 0;
                         bram_valid_in <= 6'b0;
                         reset_bram_read <= 1;
+                        abc_valid_out <= 0;
                     end
-                    4'b1010: begin
+                    OP_LOADB: begin
                         // We assume that the buffer will keep the valid flag high until memory reads the content and go idle
                         bram_in[LINE_WIDTH - 1 : 0] <= buffer_read_in[LINE_WIDTH - 1 : 0];
                         idle_out <= 0;
                         bram_read <= 1;
                         bram_write <= 0;
                         reset_bram_read <= 1;
+                        abc_valid_out <= 0;
                     end
-                    4'b1100: begin
-                        write_flag <= 1;
+                    OP_WRITEB: begin
                         idle_out <= 0;
                         bram_read <= 0;
                         bram_write <= 1;
+                        abc_valid_out <= 0;
                     end
                     default: op_code_error <= 1;
                 endcase
-                abc_valid_out <= 0;
+            end
+            else begin
+                abc_valid_out <= 0; // If no more instructions are coming in, make sure the fma blocks don't keep waiting for new data
             end
         end
     end
@@ -207,7 +196,7 @@ module memory #(
         .rstb(),     // Port B output reset (does not affect memory contents)
         .regcea(bram_write), // Port A output register enable
         .regceb(), // Port B output register enable
-        .douta(bram_out),   // Port A RAM output data, width determined from RAM_WIDTH
+        .douta(abc_out),   // Port A RAM output data, width determined from RAM_WIDTH
         .doutb()    // Port B RAM output data, width determined from RAM_WIDTH
     );
 endmodule
