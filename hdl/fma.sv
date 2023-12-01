@@ -7,23 +7,27 @@ module fma #(
 ) (
     input wire clk_in,
     input wire rst_in,
-    input wire [WIDTH-1:0] a,
-    input wire [WIDTH-1:0] b,
-    input wire [WIDTH-1:0] c,
-    input wire a_valid_in,    // only write external a value if valid_in is high
-    input wire b_valid_in,    // only write external b value if valid_in is high
-    input wire c_valid_in,    // only write external c value if valid_in is high
-    input wire compute,  // high when the FMA should compute on the next cycle
-    output logic [WIDTH-1:0] out
+    input wire [3*WIDTH-1:0] abc, // abc is laid out as "a b c" in bits
+    input wire valid_in,   // high when the FMA should read new values into a, b
+    input wire c_valid_in, // high when the FMA should read new value into c
+    output logic [WIDTH-1:0] out,
+    output logic valid_out
 );
 
     logic [WIDTH-1:0] a_internal, b_internal;
     logic [2*WIDTH-1:0] multiplication_full_precision;
 
+    logic [WIDTH-1:0] a, b;
+    assign a = abc[3*WIDTH-1:2*WIDTH];
+    assign b = abc[2*WIDTH-1:1*WIDTH];
+
+     // set to 1'b1 for integer arithmetic, 1'b0 for fixed point arithmetic
+    localparam INTEGER_ARITHMETIC = 1'b1;
+
     always_comb begin
         multiplication_full_precision = (
-            (a_valid_in ? a : a_internal) * 
-            (b_valid_in ? b : b_internal)
+            (valid_in ? a : a_internal) *
+            (valid_in ? b : b_internal)
         );
     end
 
@@ -33,7 +37,7 @@ module fma #(
             b_internal <= 0;
             out <= 0;
         end else begin
-            if (compute) begin
+            if (valid_in) begin
                 // To multiply two fixed-point numbers, treat them as regular
                 // integers and then shift to the right by the number of
                 // decimal places. Let a and b be fixed-point. Let a' and b'
@@ -48,11 +52,16 @@ module fma #(
                 // out <= (a_internal * b_internal) >> FIXED_POINT + c
                 //
                 // The below is only more complicated to stay clock-aligned. 
-                out <= (multiplication_full_precision >> FIXED_POINT) + (c_valid_in ? c : out);
+                if (INTEGER_ARITHMETIC == 1'b1) begin
+                    out <= multiplication_full_precision[WIDTH-1:0] + (c_valid_in ? abc[WIDTH-1:0] : out);
+                end else begin
+                    out <= (multiplication_full_precision >> FIXED_POINT) + (c_valid_in ? abc[WIDTH-1:0] : out);
+                end
             end
 
-            a_internal <= a_valid_in ? a : a_internal;
-            b_internal <= b_valid_in ? b : b_internal;
+            a_internal <= valid_in ? abc[3*WIDTH-1:2*WIDTH] : a_internal;
+            b_internal <= valid_in ? abc[2*WIDTH-1:1*WIDTH] : b_internal;
+            valid_out <= valid_in;
         end
     end
 
