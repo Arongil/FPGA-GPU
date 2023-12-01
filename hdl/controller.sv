@@ -54,8 +54,16 @@ module controller #(
                                //    Places sum of b_reg and val in a_reg
         OP_BGE     = 4'b0100,  // bge(a_reg, b_reg):
                                //    Sets compare_reg to 1 iff a_reg >= b_reg
-        OP_JUMP    = 4'b0101   // jump(jump_to):
+        OP_JUMP    = 4'b0101,  // jump(jump_to):
                                //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
+        OP_SMA     = 4'b0110,  // sma(val):
+                               //    Set memory address to the immediate val in the data cache.
+        OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
+                               //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
+        OP_LOADB   = 4'b1000,  // loadb(val):
+                               //    Load FMA buffer contents into the immediate addr in the data cache.
+        OP_WRITEB  = 4'b1001   // writeb(val):
+                               //    Write contents of immediate addr in the data cache to FMA blocks. 
     } isa;
 
     enum {

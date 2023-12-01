@@ -1,0 +1,46 @@
+nop         # let's multiply a 2x2 matrix!  [ 1 2 \ 3 4] * [ 5 6 \ 7 8 ]
+nop
+nop         # step 1 is to set up the matrix in memory
+nop
+sma 0       # set memory address to line 0
+loadi 0 5   # load line 0 word 0 to be value 5
+loadi 1 1   # load line 0 word 1 to be value 1
+loadi 2 0   # load line 0 word 2 to be value 0
+loadi 3 5   # load line 0 word 3 to be value 5
+loadi 4 3   # load line 0 word 4 to be value 3
+loadi 5 0   # load line 0 word 5 to be value 0
+sendl       # send completed line to BRAM
+sma 1       # set memory address to line 1
+loadi 0 7   # load line 0 word 0 to be value 7
+loadi 1 2   # load line 0 word 1 to be value 2
+loadi 2 0   # load line 0 word 2 to be value 0
+loadi 3 7   # load line 0 word 3 to be value 7
+loadi 4 4   # load line 0 word 4 to be value 4
+loadi 5 0   # load line 0 word 5 to be value 0
+sendl       # send completed line to BRAM
+sma 3       # set memory address to line 3
+loadi 0 6   # load line 0 word 0 to be value 6
+loadi 1 1   # load line 0 word 1 to be value 1
+loadi 2 0   # load line 0 word 2 to be value 0
+loadi 3 6   # load line 0 word 3 to be value 6
+loadi 4 3   # load line 0 word 4 to be value 3
+loadi 5 0   # load line 0 word 5 to be value 0
+sendl       # send completed line to BRAM
+sma 4       # set memory address to line 4
+loadi 0 9   # load line 0 word 0 to be value 8
+loadi 1 2   # load line 0 word 1 to be value 2
+loadi 2 0   # load line 0 word 2 to be value 0
+loadi 3 8   # load line 0 word 3 to be value 8
+loadi 4 4   # load line 0 word 4 to be value 4
+loadi 5 0   # load line 0 word 5 to be value 0
+sendl       # send completed line to BRAM
+nop
+nop         # step 2 is to multiply by sending data to FMAs
+nop
+writeb 0    # send line 0 to FMA blocks (first mult, column one)
+writeb 1    # send line 1 to FMA blocks (chains dot product)
+loadb 2     # load result into c values of line 2
+writeb 3    # send line 3 to FMA blocks (first mult, column two)
+writeb 4    # send line 4 to FMA blocks (chains dot product)
+loadb 5     # load result into c values of line 5
+end         # results of the matrix multiplication are in lines 2 and 5
