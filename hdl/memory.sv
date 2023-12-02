@@ -23,10 +23,11 @@ module memory #(
     output logic idle_out, // 1 when idle, 0 when busy
     output logic [LINE_WIDTH - 1 : 0] abc_out,  // for each FMA i, abc_in[i] is laid out as "a b c" 
     output logic use_new_c_out,
+    output logic fma_output_can_be_valid_out,
     output logic abc_valid_out
 );
-    // OP_CODEs: read in from FMA_write_buffer 4'b1010
-    // OP_CODEs: write to FMA_read_buffer 4'b1100
+    // OP_CODEs: read in from FMA_write_buffer 4'b1001
+    // OP_CODEs: write to FMAs 4'b1010
 
     enum logic[3:0] {
         // ------------------------------------------------------------------------
@@ -50,11 +51,15 @@ module memory #(
                                //    Send line at memory address into the BRAM.
         OP_LOADB   = 4'b1001,  // loadb(val):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
-        OP_WRITEB  = 4'b1010   // writeb(replace_c):
-                               //    Write contents of current addr in the data cache to FMA blocks. 
+        OP_WRITEB  = 4'b1010   // writeb(val, replace_c, fma_valid):
+                               //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
                                //    If replace_c is 4'b0000, FMAs will use previous c values.
                                //    If replace_c is 4'b0001, FMAs will use memory c values.
+                               //    The fma_valid value is the bits of reg_b.
+                               //    If fma_valid is 4'b0000, the FMAs will not output results.
+                               //    If fma_valid is 4'b0001, the FMAs will output their results.
+                               //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
     } isa;
 
     // accumulate FMA_COUNT * 3 = 6 words per line and read / write stuff into the BRAM in lines of 6 words each
@@ -79,6 +84,7 @@ module memory #(
             bram_valid_in <= 0;
             abc_valid_out <= 0;
             use_new_c_out <= 0;
+            fma_output_can_be_valid_out <= 0;
             op_code_error <= 0;
             bram_read <= 0;
             bram_write <= 0;
@@ -177,6 +183,8 @@ module memory #(
                     end
                     OP_WRITEB: begin
                         use_new_c_out <= (instr_in[4:7] == 4'b0001);
+                        fma_output_can_be_valid_out <= (instr_in[24:27] == 4'b0001);
+                        addr <= instr_in[8:23];
                         idle_out <= 0;
                         bram_read <= 0;
                         bram_write <= 1;

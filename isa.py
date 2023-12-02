@@ -31,6 +31,34 @@ def bge(a_reg, b_reg):
 def jump(jump_to_val):
     return (0b0101 << 28) + (jump_to_val << 8)
 
+def sma(val):
+    return (0b0110 << 28) + (val << 8)
+
+def loadi(a_reg, val):
+    return (0b0111 << 28) + (a_reg << 24) + (val << 8)
+
+def sendl():
+    return (0b1000 << 28)
+
+def loadb(val):
+    return (0b1001 << 28) + (val << 8)
+
+def writeb(val, replace_c, fma_valid):
+    return (0b1010 << 28) + (replace_c << 24) + (val << 8) + (fma_valid << 4)
+
+str_to_command = {
+    "nop": nop,
+    "end": end,
+    "xor": xor,
+    "addi": addi,
+    "bge": bge,
+    "jump": jump,
+    "sma": sma,
+    "loadi": loadi,
+    "sendl": sendl,
+    "loadb": loadb,
+    "writeb": writeb,
+}
 
 ##########################################################
 #                                                        #
@@ -52,26 +80,18 @@ def str_to_isa(program: str):
     instructions.append("nop")  # an extra no_op at the end to avoid undefined
     
     isa_commands = []
-    for instruction in instructions:
+    for line_num, instruction in enumerate(instructions):
         args = instruction.split(" ")
         command = None
         op_name = args[0]
         op_args = [int(arg) for arg in args[1:]]
-        match op_name:
-            case "nop":
-                command = nop()
-            case "end":
-                command = end()
-            case "xor":
-                command = xor(op_args[0], op_args[1])
-            case "addi":
-                command = addi(op_args[0], op_args[1], op_args[2])
-            case "bge":
-                command = bge(op_args[0], op_args[1])
-            case "jump":
-                command = jump(op_args[0])
-            case unrecognized:
-                raise ValueError(f"Didn't recognize command {unrecognized}")
+        if op_name in str_to_command:
+            try:
+                command = str_to_command[op_name](*op_args)
+            except:
+                raise ValueError(f"Invalid number of arguments on line {line_num}:\n\t{instruction}")
+        else:
+            raise ValueError(f"Didn't recognize command {unrecognized}")
         # Format the 32 bit binary number as an 8 bit hex string
         isa_commands.append(f"{command:08x}")
 
