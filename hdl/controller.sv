@@ -64,8 +64,15 @@ module controller #(
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
         OP_SENDL   = 4'b1000,  // sendl():
                                //    Send line at memory address into the BRAM.
-        OP_LOADB   = 4'b1001,  // loadb(val):
+        OP_LOADB   = 4'b1001,  // loadb(val, shuffle):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
+                               //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
+                               //       Shuffle is an immediate value of the form xxx, where x is in the set {0, 1, 2}.
+                               //       The x's represent the -2, -1, 0 results of each FMA. Example:
+                               //           shuffle = 002 means set memory address to "a a c" from the FMAs
+                               //           shuffle = 120 means set memory address to "b c a" from the FMAs
+                               //       Shuffle operates on the previous k results of each FMA independently.
+                               //       The number k of past results is a parameter that we set to 3 for now.
         OP_WRITEB  = 4'b1010   // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
