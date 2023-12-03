@@ -17,7 +17,9 @@ module controller #(
     parameter DATA_CACHE_DEPTH=4096  // number of addresses in the data cache
 ) (
     input wire clk_in,
-    input wire rst_in
+    input wire rst_in,
+    output logic [0:INSTRUCTION_WIDTH-1] instr_out, // instruction to send to memory
+    output logic instr_valid_for_memory_out
 );
     
     // CONTROLLER ------------------------------------------------------------
@@ -36,7 +38,7 @@ module controller #(
     //         - 4'b0000: 
     //         - 4'b0100: LOAD(a_addr, data)                    // put 16 bits into data_cache at a_addr
     //
-    //     Number of unique ISA instructions: 9
+    //     Number of unique ISA instructions: 11
     //
     // -----------------------------------------------------------------------
 
@@ -60,10 +62,26 @@ module controller #(
                                //    Set memory address to the immediate val in the data cache.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_LOADB   = 4'b1000,  // loadb(val):
+        OP_SENDL   = 4'b1000,  // sendl():
+                               //    Send line at memory address into the BRAM.
+        OP_LOADB   = 4'b1001,  // loadb(val, shuffle):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
-        OP_WRITEB  = 4'b1001   // writeb(val):
+                               //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
+                               //       Shuffle is an immediate value of the form xxx, where x is in the set {0, 1, 2}.
+                               //       The x's represent the -2, -1, 0 results of each FMA. Example:
+                               //           shuffle = 002 means set memory address to "a a c" from the FMAs
+                               //           shuffle = 120 means set memory address to "b c a" from the FMAs
+                               //       Shuffle operates on the previous k results of each FMA independently.
+                               //       The number k of past results is a parameter that we set to 3 for now.
+        OP_WRITEB  = 4'b1010   // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
+                               //    The replace_c value is the bits of reg_a.
+                               //    If replace_c is 4'b0000, FMAs will use previous c values.
+                               //    If replace_c is 4'b0001, FMAs will use memory c values.
+                               //    The fma_valid value is the bits of reg_b.
+                               //    If fma_valid is 4'b0000, the FMAs will not output results.
+                               //    If fma_valid is 4'b0001, the FMAs will output their results.
+                               //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
     } isa;
 
     enum {
@@ -77,7 +95,6 @@ module controller #(
     logic compare_reg;
 
     // Uncomment to track registers in GTKWave for debugging!
-    /*
     logic [PRIVATE_REG_WIDTH-1:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7; // 8 more not displayed
     assign reg0 = registers[0];
     assign reg1 = registers[1];
@@ -87,7 +104,6 @@ module controller #(
     assign reg5 = registers[5];
     assign reg6 = registers[6];
     assign reg7 = registers[7];
-    */
 
     // Instruction tracking
     localparam INSTRUCTION_DEPTH = $clog2(INSTRUCTION_COUNT);
@@ -104,7 +120,7 @@ module controller #(
         .RAM_WIDTH(INSTRUCTION_WIDTH),
         .RAM_DEPTH(INSTRUCTION_COUNT),
         .RAM_PERFORMANCE("HIGH_PERFORMANCE"),     // Select "HIGH_PERFORMANCE"
-        .INIT_FILE(`FPATH(isa-simple-for-loop.mem))  // Specify file to init RAM
+        .INIT_FILE(`FPATH(isa-matrix-mult.mem))  // Specify file to init RAM
     ) instruction_buffer (
         .clka(clk_in),                   // PORT 1
         .addra(instruction_index),       // Read address (current instruction)
@@ -129,6 +145,7 @@ module controller #(
     logic instr_ready, just_used_prefetch;
     logic [0:INSTRUCTION_WIDTH-1] instr;
     assign instr = current_instruction; // redesign once we do prefetching
+    assign instr_out = current_instruction;
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
             state <= LOAD_INSTRUCTION;
@@ -193,7 +210,7 @@ module controller #(
                         end
 
                         default: begin
-                            state <= IDLE;
+                            // Unrecognized instruction is NOP
                         end
                     endcase 
 
@@ -208,6 +225,15 @@ module controller #(
                         state <= LOAD_INSTRUCTION; // TEMP -- remove when using prefetching and instead directly go to next instruction
                         //end
                     end
+
+                    // Tell other modules when their instructions are valid.
+                    // 1. Memory (op code is NOP, SMA, LOADI, SENDL, LOADB, or WRITEB)
+                    // 2. HDMI (to be implemented)
+                    instr_valid_for_memory_out <= (
+                        instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
+                        instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
+                        instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB
+                    );
                 end
 
                 default: begin

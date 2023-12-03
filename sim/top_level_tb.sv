@@ -6,7 +6,7 @@ module top_level_tb;
     localparam PRIVATE_REG_WIDTH=16;
     localparam PRIVATE_REG_COUNT=16;
     localparam INSTRUCTION_WIDTH=32;
-    localparam INSTRUCTION_COUNT=8;    // UPDATE TO MATCH PROGRAM_FILE
+    localparam INSTRUCTION_COUNT=54;    // UPDATE TO MATCH PROGRAM_FILE!
     localparam DATA_CACHE_WIDTH=16;
     localparam DATA_CACHE_DEPTH=4096;
 
@@ -38,7 +38,12 @@ module top_level_tb;
     logic memory_instr_valid_in;
     logic memory_idle_out;
     logic [LINE_WIDTH-1:0] memory_abc_out;
-    logic memory_use_new_c_out, memory_abc_valid_out;
+    logic memory_use_new_c_out;
+    logic memory_fma_output_can_be_valid_out;
+    logic memory_abc_valid_out;
+
+    // logics for controller
+
 
     // Instantiate 2 FMA blocks!
     fma #(
@@ -50,6 +55,7 @@ module top_level_tb;
         .abc(memory_abc_out[LINE_WIDTH - 1:LINE_WIDTH/2]),
         .valid_in(memory_abc_valid_out),
         .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
         .out(fma_out_1),
         .valid_out(fma_valid_out_1)
     );
@@ -63,6 +69,7 @@ module top_level_tb;
         .abc(memory_abc_out[LINE_WIDTH/2 - 1:0]),
         .valid_in(memory_abc_valid_out),
         .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
         .out(fma_out_2),
         .valid_out(fma_valid_out_2)
     );
@@ -98,8 +105,26 @@ module top_level_tb;
         .idle_out(memory_idle_out),
         .abc_out(memory_abc_out),
         .abc_valid_out(memory_abc_valid_out),
-        .use_new_c_out(memory_use_new_c_out)
+        .use_new_c_out(memory_use_new_c_out),
+        .fma_output_can_be_valid_out(memory_fma_output_can_be_valid_out)
     );
+
+    // Instantiate controller!
+    controller #(
+        .PROGRAM_FILE(),
+        .PRIVATE_REG_WIDTH(PRIVATE_REG_WIDTH),
+        .PRIVATE_REG_COUNT(PRIVATE_REG_COUNT),
+        .INSTRUCTION_WIDTH(INSTRUCTION_WIDTH),
+        .INSTRUCTION_COUNT(INSTRUCTION_COUNT),
+        .DATA_CACHE_WIDTH(DATA_CACHE_WIDTH),
+        .DATA_CACHE_DEPTH(DATA_CACHE_DEPTH)
+    ) controller_module (
+        .clk_in(clk_in),
+        .rst_in(rst_in),
+        .instr_out(memory_instr_in),
+        .instr_valid_for_memory_out(memory_instr_valid_in)
+    );
+
 
     // Declare testbench variables here
     logic [INSTRUCTION_WIDTH-1:0] addr;
@@ -126,113 +151,10 @@ module top_level_tb;
         rst_in = 0;
         #10;
 
-        // Goal for this testbench is to compute (1*2 + 3), (4*5 + 6) in parallel
-        
-        //////////////////////////////////////////////////
-        // Step 1: load some values into memory
-        //////////////////////////////////////////////////
-
-        // op code is SMA        addr is 0_0000_0001
-        addr = 32'b0110___0000___0000_0000_0000_0001___0000___0000;
-        memory_instr_in = addr;
-        memory_instr_valid_in = 1;
-        #10;
-        // Give instructions that fill the line at that address with DATA
-        // op code is LOADI
-        memory_instr_in = 32'b0111___0000___0000_0000_0000_0001___0000___0000;
-        #10;
-        memory_instr_in = 32'b0111___0001___0000_0000_0000_0010___0000___0000;
-        #10;
-        memory_instr_in = 32'b0111___0010___0000_0000_0000_0011___0000___0000;
-        #10;
-        memory_instr_in = 32'b0111___0011___0000_0000_0000_0100___0000___0000;
-        #10;
-        memory_instr_in = 32'b0111___0100___0000_0000_0000_0101___0000___0000;
-        #10;
-        memory_instr_in = 32'b0111___0101___0000_0000_0000_0110___0000___0000;
-        #10; 
-        // op code is SENDL
-        memory_instr_in = 32'b1000___0000___0000_0000_0000_0000___0000___0000;
-        // BRAM is written to in one cycle
-        #10;
-
-        // op code is WRITEB (replace_c is 1)
-        memory_instr_in = 32'b1010___0001___0000_0000_0000_0000___0000___0000;
-        // BRAM takes two cycles to read, then send to FMA blocks
-        #10;
-        // default instruction is NOP
-        memory_instr_in = 32'b0000___0000___0000_0000_0000_0000___0000___0000;
-        #10;
-        // FMAs are computing...
-        #10;
-        // At this point, the FMAs should be DONE COMPUTING!
-
-        //////////////////////////////////////////////////
-        // Step 2: Give FMAs new a and b values, chaining off old c values
-        //////////////////////////////////////////////////
-
-        // CHAIN C OFF OLD VALUES
-        // op code is WRITEB (replace_c is 0)
-        memory_instr_in = 32'b1010___0000___0000_0000_0000_0000___0000___0000;
-        // BRAM takes two cycles to read, then send to FMA blocks
-        #10;
-        // default instruction is NOP
-        memory_instr_in = 32'b0000___0000___0000_0000_0000_0000___0000___0000;
-        #10;
-        // FMAs are computing...
-        #10;
-        // At this point, the FMAs should be DONE COMPUTING!
-        
-        // REPLACE C WITH NEW VALUE
-        // op code is WRITEB (replace_c is 1)
-        memory_instr_in = 32'b1010___0001___0000_0000_0000_0000___0000___0000;
-        // BRAM takes two cycles to read, then send to FMA blocks
-        #10;
-        // default instruction is NOP
-        memory_instr_in = 32'b0000___0000___0000_0000_0000_0000___0000___0000;
-        #10;
-        // FMAs are computing...
-        #10;
-        // At this point, the FMAs should be DONE COMPUTING!
-        #10;
-
-        //////////////////////////////////////////////////
-        // Step 3: Connect FMAs to write buffer
-        //////////////////////////////////////////////////
-
-        // MOREOVER... not only are the FMAs done computing,
-        // but we've done three FMA computations. That means
-        // we have a full line ready to send to memory.
-        // The write buffer sends the line automatically.
-
-        //////////////////////////////////////////////////
-        // Step 4: Connect write buffer to put outputs back in memory
-        //////////////////////////////////////////////////
-
-        // Give the write buffer one cycle to display its values.
-        #10;
-        // Write buffer sets line_valid high!
-        #10;
-        // op code is LOADB                 addr is 2
-        memory_instr_in = 32'b1001___0000___0000_0000_0000_0010___0000___0000;
-        #10;
-        // Output from FMAs should be in BRAM!
-
-        // default instruction is NOP
-        memory_instr_in = 32'b0000___0000___0000_0000_0000_0000___0000___0000;
-        #50;
-
-        //////////////////////////////////////////////////
-        // Step 5: Connect the controller to memory (with matrix mult program!)
-        //////////////////////////////////////////////////
-
-        // THIS TESTBENCH IS DONE.
-        // MAKE A NEW TESTBENCH THAT WIRES UP CONTROLLER TO CONTROL INSTR_IN.
-
-        //for (int cycle = 0; cycle < 64; cycle = cycle + 1) begin
-        //    $display("State %1d | Executing %4b", uut.state, uut.instr[0:3]);
-        //    #10;
-        //end
+        for (int cycle = 0; cycle < 2*INSTRUCTION_COUNT + 8; cycle = cycle + 1) begin
+            $display("State %1d | Executing %4b", controller_module.state, controller_module.instr[0:3]);
+            #10;
+        end
 
         $finish;
 

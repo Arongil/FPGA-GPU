@@ -10,6 +10,7 @@ module fma #(
     input wire [3*WIDTH-1:0] abc, // abc is laid out as "a b c" in bits
     input wire valid_in,   // high when the FMA should read new values into a, b
     input wire c_valid_in, // high when the FMA should read new value into c
+    input wire output_can_be_valid_in, // low when calculated values should stay internal only
     output logic [WIDTH-1:0] out,
     output logic valid_out
 );
@@ -61,7 +62,7 @@ module fma #(
 
             a_internal <= valid_in ? abc[3*WIDTH-1:2*WIDTH] : a_internal;
             b_internal <= valid_in ? abc[2*WIDTH-1:1*WIDTH] : b_internal;
-            valid_out <= valid_in;
+            valid_out <= valid_in && output_can_be_valid_in;
         end
     end
 
