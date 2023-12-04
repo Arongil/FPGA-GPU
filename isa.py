@@ -74,9 +74,10 @@ def str_to_isa(program: str):
     """
 
     # Split the input on newlines (skipping empty last line),
-    # ignore any comments, and remove extra whitespace.
+    # ignore any comments, empty lines, and extra whitespace.
     instructions = program.split("\n")[:-1]
     instructions = [i.split("#")[0].lower().strip() for i in instructions]
+    instructions = [i for i in instructions if i != ""]
     instructions.append("nop")  # an extra no_op at the end to avoid undefined
     
     isa_commands = []

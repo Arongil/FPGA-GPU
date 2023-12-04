@@ -1,0 +1,106 @@
+###########################
+#   MANDELBROT ON A GPU   #
+###########################
+#
+# Let's render the mandelbrot set!
+#
+# The steps are as follows:
+#   1. Set up mesh of grid points to render
+#   2. Loop over all grid points
+#   3. Parallel process num_iters before divergence,
+#      according to the Mandelbrot relation, z = z^2 + z_0.
+#   4. Send num_iters to HDMI module for colorized rendering.
+
+# CONVENTIONS:
+#   - There are 16 private registers for the controller.
+#   - Register 0 is always set all to zeros.
+#   - Register 1 is reserved as a return line.
+#   - There are 2 FMA blocks available for parallelism. [UPDATE TO 16]
+#   - All FMA operations are fixed-point with 16 bits.
+#   - Negative numbers are represented as two's complement.
+#   - There are 504000 bits available in GPU main memory. [UPDATE BRAM TO ACCOUNT]
+#   - Main memory is split into lines of 6 numbers each. [UPDATE TO 3*FMA_COUNT]
+#   - The HDMI display expects resolution of 160 x 320, with 4 bits per pixel.
+#   - The bits represent num_iters / 8, so that the range [0, 127] is represented.
+
+# Step 1: Set up mesh of grid points to render
+xor 0 0               # zero out register 0
+addi 2 0 160          # HEIGHT = 160: set register 2 to 160
+addi 3 0 320          # WIDTH = 320: set register 3 to 320
+addi 4 0 -2f          # X_MIN = -2 (f notation compiles into fixed-point)
+addi 5 0 0.0078125f   # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
+addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
+addi 7 0 0.015625f    # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
+
+# Step 2: Loop over all grid points
+#   - Use register 8 as x_counter
+#   - Use register 9 as y_counter
+#   - Use register 10 as x_val
+#   - Use register 11 as y_val
+#   - Increment x_val and y_val by DX and DY
+# We will implement the following pseudocode:
+#   for (x_counter = 0; x_counter < WIDTH; x_counter++) {
+#     for (y_counter = 0; y_counter < HEIGHT; y_counter++) {
+#        // load Mandelbrot coordinates into main memory
+#     }
+#   }
+
+# <FOR LOOP X>
+
+xor 8 8                # set x_counter = 0
+addi 10 4 0            # set x_val to X_MIN
+
+bge 2 8                # branch if WIDTH >= x_counter [JUMP MARKER 0]
+jump ____              # jump past (1)
+
+# <FOR LOOP X: INNER LOGIC>
+
+# <FOR LOOP Y>
+
+xor 9 9                # zero out register 9
+addi 11 6 0            # set y_val to Y_MIN
+
+bge 3 9                # branch if HEIGHT >= y_counter [JUMP MARKER 2]
+jump ____              # jump past (3)
+
+# <FOR LOOP Y: INNER LOGIC>
+
+# In this inner nested for loop, we have access to the following variables:
+#   x_counter (reg 8), y_counter (reg 9), x_val (reg 10), y_val (reg 11)
+# We will place these values into memory in such a way that we can enter one
+# final for loop, in which we will compute num_iters.
+
+# </FOR LOOP Y: INNER LOGIC>
+
+addi 11 11 0.015625f   # increment y_val by DY
+addi 9 9 1             # increment y_counter by 1
+jump ____              # jump to (2) [JUMP MARKER 3]
+
+# </FOR LOOP Y>
+
+# </FOR LOOP X: INNER LOGIC>
+
+addi 10 10 0.0078125f  # increment x_val by DX
+addi 8 8 1             # increment x_counter by 1
+jump ____              # jump to (0) [JUMP MARKER 1]
+
+# </FOR LOOP X>
+
+
+addi 11 11 0.015625f   # increment y_val by DY
+addi 9 9 1             # increment y_counter by 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+end
