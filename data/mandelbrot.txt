@@ -70,9 +70,18 @@ jump ____              # jump past (3)
 # We will place these values into memory in such a way that we can enter one
 # final for loop, in which we will compute num_iters.
 
+sma 1        # set memory address to line 1
+load 0 10    # load line 1 "a" to be x_val (reg 10)
+load 1 10    # load line 1 "b" to be x_val (reg 10)
+load 2 0    # load line 1 word 2 to be value 0
+load 3 5    # load line 1 word 3 to be value 5
+load 4 3    # load line 1 word 4 to be value 3
+load 5 0    # load line 1 word 5 to be value 0
+
 # </FOR LOOP Y: INNER LOGIC>
 
 addi 11 11 0.015625f   # increment y_val by DY
+addi 11 11 0.015625f   # increment y_val by DY (twice for two FPGAs)
 addi 9 9 1             # increment y_counter by 1
 jump ____              # jump to (2) [JUMP MARKER 3]
 
