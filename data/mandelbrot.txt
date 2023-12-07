@@ -33,10 +33,12 @@ addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
 addi 7 0 0.015625f    # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
 
 # Step 2: Loop over all grid points
-#   - Use register 8 as x_counter (0 to 319)
-#   - Use register 9 as y_counter (0 to 159)
-#   - Use register 10 as x_val (-2 to 0.5)
-#   - Use register 11 as y_val (-1.25 to 1.25)
+#   - Use register 8 as x_counter
+#   - Use register 9 as y_counter
+#   - Use register 10 as x_val
+#   - Use register 11 as y_val
+#   - Use register 12 as minus_y_val
+#   - Use register 14 as addr_for_iters
 #   - Increment x_val and y_val by DX and DY
 # We will implement the following pseudocode:
 #   for (x_counter = 0; x_counter < WIDTH; x_counter++) {
@@ -44,6 +46,8 @@ addi 7 0 0.015625f    # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
 #        // load Mandelbrot coordinates into main memory
 #     }
 #   }
+
+xor 14 14              # zero out register 14 (addr_for_iters
 
 # <FOR LOOP X>
 
@@ -59,6 +63,7 @@ jump ____              # jump past (1)
 
 xor 9 9                # zero out register 9
 addi 11 6 0            # set y_val to Y_MIN
+addi 12 6 0            # set minus_y_val to -Y_MIN
 
 bge 3 9                # branch if HEIGHT >= y_counter [JUMP MARKER 2]
 jump ____              # jump past (3)
@@ -70,18 +75,60 @@ jump ____              # jump past (3)
 # We will place these values into memory in such a way that we can enter one
 # final for loop, in which we will compute num_iters.
 
+# We will always perform Mandelbrot calculations in lines 1-3 of memory.
+# Mandelbrot results will go in the last XXXX bits of memory.
 sma 1        # set memory address to line 1
-load 0 10    # load line 1 "a" to be x_val (reg 10)
-load 1 10    # load line 1 "b" to be x_val (reg 10)
-load 2 0    # load line 1 word 2 to be value 0
-load 3 5    # load line 1 word 3 to be value 5
-load 4 3    # load line 1 word 4 to be value 3
-load 5 0    # load line 1 word 5 to be value 0
+# Let's compute x*x + x_0 (base case) (TEMP x_{i+1})
+load 0 10    # load x_val into FMA_1 "a"
+load 1 10    # load x_val into FMA_1 "b"
+load 2 10    # load x_val into FMA_1 "c"
+load 3 10    # load x_val into FMA_2 "a"
+load 4 10    # load x_val into FMA_2 "b"
+load 5 10    # load x_val into FMA_2 "c"
+sendl
+writeb 1 1 1 # send line 1 to the FMAs! (replace_c, fma_valid_out)
+# Let's compute x*x - y*y + y_0 (FULL x_{i+1}
+load 0 12    # load -y_val into FMA_1 "a" (reg 12)
+load 1 10    # load y_val into FMA_1 "b"
+load 2 0     # load 0 into FMA_1 "c"
+load 3 12    # load -y_val into FMA_2 "a" (reg 12)
+load 4 10    # load x_val into FMA_2 "b"
+load 5 0     # load 0 into FMA_2 "c"
+writeb 1 0 1 # send line 1 to the FMAs! (not replace_c, fma_valid_out)
+# Let's compute 2*x*y + y_0 (FULL y_{i+1})
+load 0 13    # load 2*x_val into FMA_1 "a" (reg 13)
+load 1 11    # load y_val into FMA_1 "b"
+load 2 11    # load y_val into FMA_1 "c"
+load 3 13    # load 2*x_val into FMA_2 "a" (reg 13)
+load 4 11    # load y_val into FMA_2 "b"
+load 5 11    # load y_val into FMA_2 "c"
+sendl
+writeb 1 1 1 # send line 1 to the FMAs again! (replace_c, fma_valid_out)
+# NOW: the write buffer will send THREE values for each FMA:
+#   1. x_{i+1} temp
+#   2. x_{i+1} full
+#   3. y_{i+1} full
+# Shuffle should select out (x_{i+1} full, y_{i+1} full).
+# Shuffle should also select (2x_{i+1} full and -y_{i+1} full).
+
+# RESERVE line 3 for whether that point has diverged so far.
+
+# INSERT CHECK HERE FOR WHETHER WE DIVERGED
+op_or 1     # record whether points diverged by iteration 1
+
+
+# <mandelbrot for loop>
+# </mandelbrot for loop>
+
+# do a register computation to create a register that is col-major order for the frame buffer, then write to that register (14)
+# addr = x_count * WIDTH + y_count
+send_iters 14    # send to line addr_to_send of frame buffer the mandelbrot_iters
 
 # </FOR LOOP Y: INNER LOGIC>
 
-addi 11 11 0.015625f   # increment y_val by DY
+addi 11 11 0.015625f   # increment y_val by DY  (FMA_1 DONE)
 addi 11 11 0.015625f   # increment y_val by DY (twice for two FPGAs)
+addi 14 14 2           # increment addr_for_iters by FMA_COUNT = 2
 addi 9 9 1             # increment y_counter by 1
 jump ____              # jump to (2) [JUMP MARKER 3]
 

@@ -73,7 +73,7 @@ module controller #(
                                //           shuffle = 120 means set memory address to "b c a" from the FMAs
                                //       Shuffle operates on the previous k results of each FMA independently.
                                //       The number k of past results is a parameter that we set to 3 for now.
-        OP_WRITEB  = 4'b1010   // writeb(val, replace_c, fma_valid):
+        OP_WRITEB  = 4'b1010,  // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
                                //    If replace_c is 4'b0000, FMAs will use previous c values.
@@ -82,6 +82,18 @@ module controller #(
                                //    If fma_valid is 4'b0000, the FMAs will not output results.
                                //    If fma_valid is 4'b0001, the FMAs will output their results.
                                //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
+        OP_OR       = 4'b1011, // or(iter):
+                               //   for every (x, y) pair in the
+                               //   fma_write_buffer value that we catch in
+                               //   the memory module, set the corresponding
+                               //   mandelbrot_iters local logic in memory to
+                               //   iter if mandelbrot_iters[i] == 15 and |x| >
+                               //   = 2 or |y| >= 2. (mandelbrot_iters[i] is
+                               //   whether i^th FMA's pixel has diverged)
+        OP_SENDITERS= 4'b1100  // senditers(a_reg):
+                               //   Write mandelbrot_iters to the address at
+                               //   the value of a_reg in the
+                               //   frame buffer, ready to be colored in!
     } isa;
 
     enum {
