@@ -95,6 +95,7 @@ load 2 0     # load 0 into FMA_1 "c"
 load 3 12    # load -y_val into FMA_2 "a" (reg 12)
 load 4 10    # load x_val into FMA_2 "b"
 load 5 0     # load 0 into FMA_2 "c"
+sendl
 writeb 1 0 1 # send line 1 to the FMAs! (not replace_c, fma_valid_out)
 # Let's compute 2*x*y + y_0 (FULL y_{i+1})
 load 0 13    # load 2*x_val into FMA_1 "a" (reg 13)
@@ -128,6 +129,23 @@ jump ____     # jump to (5) [JUMP MARKER 6]
 # 1. Now we pull (x, y) values out of fma_write_buffer via loadb with shuffle arguments.
 # 2. We compute the next iteration of the Mandelbrot formula.
 # 3. Then we OP_OR to record any new divergences.
+
+# Let's compute x*x + x_0 (base case) (TEMP x_{i+1})
+loadb 1 2 2 0  # set line 1 of memory to "x_i x_i 0"
+load 2 10      # load x_val = x_0 into FMA_1 "c" 
+load 5 10      # load x_val = x_0 into FMA_2 "c"
+sendl
+writeb 1 1 1   # send line 1 to FMAs! (replace_c, fma_valid_out)
+
+# Let's compute x*x - y*y + y_0 (FULL x_{i+1}
+loadb 1 -3 3 0 # set line 1 of memory to "-y_i y_i 0"
+sendl
+writeb 1 0 1   # send line 1 to FMAs! (not replace_c, fma_valid_out)
+
+# Let's compute 2*x*y + y_0 (FULL y_{i+1})
+loadb 1 4 3 0  # set line 1 of memory to "2*x_i y_i 0"
+load 2 11      #
+
 
 # </mandelbrot for loop>
 
