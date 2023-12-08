@@ -28,9 +28,10 @@ xor 0 0               # zero out register 0
 addi 2 0 160          # HEIGHT = 160: set register 2 to 160
 addi 3 0 320          # WIDTH = 320: set register 3 to 320
 addi 4 0 -2f          # X_MIN = -2 (f notation compiles into fixed-point)
-addi 5 0 0.0078125f   # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
+#addi 5 0 0.0078125f  # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
 addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
-addi 7 0 0.015625f    # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
+#addi 7 0 0.015625f   # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
+addi 5 0 127          # MAX_ITERS = 127 (register 5)
 
 # Step 2: Loop over all grid points
 #   - Use register 8 as x_counter
@@ -116,13 +117,26 @@ writeb 1 1 1 # send line 1 to the FMAs again! (replace_c, fma_valid_out)
 # INSERT CHECK HERE FOR WHETHER WE DIVERGED
 op_or 1     # record whether points diverged by iteration 1
 
+# Register 15 will hold the iter value
+addi 15 0 1   # iters = 1: set register 15 to value 1
+bge 15 5      # if iters >= 127
+jump ____     # jump to (5) [JUMP MARKER 6]
 
 # <mandelbrot for loop>
+
+# Three steps:
+# 1. Now we pull (x, y) values out of fma_write_buffer via loadb with shuffle arguments.
+# 2. We compute the next iteration of the Mandelbrot formula.
+# 3. Then we OP_OR to record any new divergences.
+
 # </mandelbrot for loop>
+
+addi 15 15 1  # increment iters by 1
+jump ____     # jump to (6) [JUMP MARKER 5]
 
 # do a register computation to create a register that is col-major order for the frame buffer, then write to that register (14)
 # addr = x_count * WIDTH + y_count
-send_iters 14    # send to line addr_to_send of frame buffer the mandelbrot_iters
+send_iters ___14    # send to line addr_to_send of frame buffer the mandelbrot_iters
 
 # </FOR LOOP Y: INNER LOGIC>
 
