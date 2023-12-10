@@ -150,7 +150,7 @@ jump ____     # jump to (6) [JUMP MARKER 5]
 
 # do a register computation to create a register that is col-major order for the frame buffer, then write to that register (14)
 # addr = x_count * WIDTH + y_count
-send_iters ___14    # send to line addr_to_send of frame buffer the mandelbrot_iters
+senditers ___14    # send to line addr_to_send of frame buffer the mandelbrot_iters
 
 # </FOR LOOP Y: INNER LOGIC>
 

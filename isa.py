@@ -40,11 +40,23 @@ def loadi(a_reg, val):
 def sendl():
     return (0b1000 << 28)
 
-def loadb(val):
-    return (0b1001 << 28) + (val << 8)
+def loadb(val, shuffle1, shuffle2, shuffle3):
+    return (0b1001 << 28) + (shuffle1 << 24) + (val << 8) + (shuffle2 << 4) + (shuffle3 << 0)
+
+def load(abc, b_reg, diff):
+    return (0b1010 << 28) + (abc << 24) + (diff << 8) + (b_reg << 4)
 
 def writeb(val, replace_c, fma_valid):
-    return (0b1010 << 28) + (replace_c << 24) + (val << 8) + (fma_valid << 4)
+    return (0b1011 << 28) + (replace_c << 24) + (val << 8) + (fma_valid << 4)
+
+def write(replace_c, fma_valid):
+    return (0b1100 << 28) + (replace_c << 24) + (fma_valid << 4)
+
+def op_or(iters):
+    return (0b1101 << 28) + (iters << 24)
+
+def senditers(a_reg):
+    return (0b1110 << 28) + (a_reg << 24)
 
 str_to_command = {
     "nop": nop,
@@ -57,8 +69,71 @@ str_to_command = {
     "loadi": loadi,
     "sendl": sendl,
     "loadb": loadb,
+    "load": load,
     "writeb": writeb,
+    "write": write,
+    "op_or": op_or,
+    "senditers": senditers,
 }
+
+##########################################################
+#                                                        #
+# The function below converts jump markers and fixed     #
+# point numbers into machine code interpretable form.    #
+#                                                        #
+##########################################################
+
+
+def float_to_fixed_point_binary_base10(value: float) -> int:
+    """
+    Converts a float to a fixed-point binary number with 10 places after the fixed point
+    and 16 bits in total, then returns that binary number represented in base 10.
+    
+    Args:
+        value (float): The float value to convert. Should be in the range -63 to 64.
+
+    Returns:
+        int: The fixed-point binary number represented in base 10.
+
+    Credit: function written by GPT-4, Dec 10th, 2023
+    """
+
+    # Constants
+    MAX_BITS = 16
+    FRACTIONAL_BITS = 10
+
+    # Scale the float to fixed point value
+    scaled_value = int(round(value * (1 << FRACTIONAL_BITS)))
+
+    # Handle negative values using two's complement
+    if scaled_value < 0:
+        scaled_value = (1 << MAX_BITS) + scaled_value
+
+    return scaled_value
+
+
+def interpret_arg(arg: str, instructions: list) -> int:
+    """
+    Given an argument (str) and the full program instructions,
+    return an int that represents the desired interpretation.
+    1. Jump markers: (X) is converted to the line where X is marked.
+    2. Fixed point: 1.5f is converted to 1.5 as a fixed point number.
+    """
+
+    # Jump marker -- find the marker and go to that line
+    if arg[0:3] == "(((" and arg[-3:] == ")))":
+        marker = arg[3:-3]
+        for line_num, line in enumerate(instructions):
+            if f"[JUMP MARKER {marker}]" in line:
+                return line_num
+
+    # Fixed point -- convert to 16 bit fixed point (10 "decimal places")
+    if arg[-1] == "f":
+        num = float(arg[:-1])
+        return float_to_fixed_point_binary_base10(num)
+
+    return int(arg) 
+
 
 ##########################################################
 #                                                        #
@@ -66,6 +141,7 @@ str_to_command = {
 # into a machine code program that conforms to the ISA.  #
 #                                                        #
 ##########################################################
+
 
 def str_to_isa(program: str): 
     """
@@ -76,16 +152,16 @@ def str_to_isa(program: str):
     # Split the input on newlines (skipping empty last line),
     # ignore any comments, empty lines, and extra whitespace.
     instructions = program.split("\n")[:-1]
-    instructions = [i.split("#")[0].lower().strip() for i in instructions]
-    instructions = [i for i in instructions if i != ""]
+    instructions = [i for i in instructions if i.split("#")[0].lower().strip() != ""]
     instructions.append("nop")  # an extra no_op at the end to avoid undefined
     
     isa_commands = []
-    for line_num, instruction in enumerate(instructions):
+    for line_num, line in enumerate(instructions):
+        instruction = line.split("#")[0].lower().strip()
         args = instruction.split(" ")
         command = None
         op_name = args[0]
-        op_args = [int(arg) for arg in args[1:]]
+        op_args = [interpret_arg(arg, instructions) for arg in args[1:]]
         if op_name in str_to_command:
             try:
                 command = str_to_command[op_name](*op_args)

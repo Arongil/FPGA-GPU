@@ -74,7 +74,9 @@ module controller #(
                                //       Additionally, the values {4, 5, 6} and {-4, -5, -6} are allowed. These correspond to 2*a, 2*b, 2*c, -2*a, -2*b, and -2*c.
                                //       Shuffle operates on the previous k results of each FMA independently.
                                //       The number k of past results is a parameter that we set to 3 for now.
-        OP_WRITEB  = 4'b1010,  // writeb(val, replace_c, fma_valid):
+        OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):
+                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+        OP_WRITEB  = 4'b1011,  // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
                                //    If replace_c is 4'b0000, FMAs will use previous c values.
@@ -83,7 +85,10 @@ module controller #(
                                //    If fma_valid is 4'b0000, the FMAs will not output results.
                                //    If fma_valid is 4'b0001, the FMAs will output their results.
                                //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
-        OP_OR       = 4'b1011, // or(iter):
+        OP_WRITE = 4'b1100,    // write(replace_c, fma_valid)
+                               //     Write directly from temporary register in memory module to FMAs.
+                               //     Arguments replace_c and fma_valid are the same as in writeb.
+        OP_OR       = 4'b1101, // or(iter):
                                //    for every (x, y) pair in the
                                //    fma_write_buffer value that we catch in
                                //    the memory module, set the corresponding
@@ -92,16 +97,13 @@ module controller #(
                                //    = 2 or |y| >= 2. mandelbrot_iters[i] is
                                //    whether i^th FMA's pixel has diverged.
                                //    Note that iter is a register, and we use
-                               //    the value in that register.
-        OP_SENDITERS = 4'b1100,// senditers(a_reg):
+                               //    the value in that register divided by 8.
+                               //    We divide by 8 to squeeze more iterations
+                               //    into 4 bits.
+        OP_SENDITERS = 4'b1110,// senditers(a_reg):
                                //    Write mandelbrot_iters to the address at
                                //    the value of a_reg in the
                                //    frame buffer, ready to be colored in!
-        OP_LOAD    = 4'b1101,  // load(abc, reg_b, diff):
-                               //    Load value at controller reg_b into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
-        OP_WRITE = 4'b1110     // write(replace_c, fma_valid)
-                               //     Write directly from temporary register in memory module to FMAs.
-                               //     Arguments replace_c and fma_valid are the same as in writeb.
     } isa;
 
     enum {
