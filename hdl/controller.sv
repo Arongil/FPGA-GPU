@@ -89,14 +89,19 @@ module controller #(
                                //    the memory module, set the corresponding
                                //    mandelbrot_iters local logic in memory to
                                //    iter if mandelbrot_iters[i] == 15 and |x| >
-                               //    = 2 or |y| >= 2. (mandelbrot_iters[i] is
-                               //    whether i^th FMA's pixel has diverged)
-        OP_SENDITERS= 4'b1100, // senditers(a_reg):
+                               //    = 2 or |y| >= 2. mandelbrot_iters[i] is
+                               //    whether i^th FMA's pixel has diverged.
+                               //    Note that iter is a register, and we use
+                               //    the value in that register.
+        OP_SENDITERS = 4'b1100,// senditers(a_reg):
                                //    Write mandelbrot_iters to the address at
                                //    the value of a_reg in the
                                //    frame buffer, ready to be colored in!
-        OP_LOAD    = 4'b1101   // load(abc, reg, diff):
-                               //    Load value at reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c), where FMA_i's value is set at reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+        OP_LOAD    = 4'b1101,  // load(abc, reg_b, diff):
+                               //    Load value at controller reg_b into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+        OP_WRITE = 4'b1110     // write(replace_c, fma_valid)
+                               //     Write directly from temporary register in memory module to FMAs.
+                               //     Arguments replace_c and fma_valid are the same as in writeb.
     } isa;
 
     enum {
@@ -110,7 +115,7 @@ module controller #(
     logic compare_reg;
 
     // Uncomment to track registers in GTKWave for debugging!
-    logic [PRIVATE_REG_WIDTH-1:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7; // 8 more not displayed
+    logic [PRIVATE_REG_WIDTH-1:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7, reg8, reg9, reg10, reg11, reg12, reg13, reg14, reg15;
     assign reg0 = registers[0];
     assign reg1 = registers[1];
     assign reg2 = registers[2];
@@ -119,6 +124,14 @@ module controller #(
     assign reg5 = registers[5];
     assign reg6 = registers[6];
     assign reg7 = registers[7];
+    assign reg8 = registers[8];
+    assign reg9 = registers[9];
+    assign reg10 = registers[10];
+    assign reg11 = registers[11];
+    assign reg12 = registers[13];
+    assign reg13 = registers[13];
+    assign reg14 = registers[14];
+    assign reg15 = registers[15];
 
     // Instruction tracking
     localparam INSTRUCTION_DEPTH = $clog2(INSTRUCTION_COUNT);
@@ -244,11 +257,12 @@ module controller #(
                     // Tell other modules when their instructions are valid.
                     // 1. Memory (op code is NOP, SMA, LOADI, SENDL, LOADB, or WRITEB)
                     // 2. HDMI (to be implemented)
-                    instr_valid_for_memory_out <= (
-                        instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
-                        instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
-                        instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB
-                    );
+                    instr_valid_for_memory_out <= 1'b1; //(
+                        //instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
+                        //instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
+                        //instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB ||
+                        //instr[0:3] == OP_LOAD  || instr[0:3] == OP_WRITE
+                    //);
                 end
 
                 default: begin
