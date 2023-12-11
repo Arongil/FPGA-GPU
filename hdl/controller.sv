@@ -62,19 +62,19 @@ module controller #(
         OP_JUMP    = 4'b0101,  // jump(jump_to):
                                //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
         OP_SMA     = 4'b0110,  // sma(val):
-                               //    Set memory address to the immediate val in the data cache.
+                               //    Set memory address to the immediate val in the data cache. (FUTURE IMPROVEMENT: DELETE SMA AND MERGE WITH SENDL)
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_SENDL   = 4'b1000,  // sendl():
-                               //    Send line at memory address into the BRAM.
-        OP_LOADB   = 4'b1001,  // loadb(val, shuffle1, shuffle2, shuffle3):
+        OP_SENDL   = 4'b1000,  // sendl(addr):
+                               //    Send line into the BRAM at memory address addr.
+        OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
                                //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
                                //       Shuffle is three register values of the form xxx, where x is in the set {-3, -2, -1, 0, 1, 2, 3}.
                                //       The x's represent the previous three outputs of each FMA, where negative means 2's complement and 0 means to place all zeros. Example:
                                //           shuffle = 1 2 0 means set memory address to "a b 0" from the FMAs
                                //           shuffle = -3 3 1 means set memory address to "-c c a" from the FMAs
-                               //       Additionally, the values {4, 5, 6} and {-4, -5, -6} are allowed. These correspond to 2*a, 2*b, 2*c, -2*a, -2*b, and -2*c.
+                               //       Additionally, the values {4, 5, 6} are allowed. These correspond to 2*a, 2*b, 2*c.
                                //       Shuffle operates on the previous k results of each FMA independently.
                                //       The number k of past results is a parameter that we set to 3 for now.
         OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):

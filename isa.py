@@ -116,8 +116,9 @@ def interpret_arg(arg: str, instructions: list) -> int:
     """
     Given an argument (str) and the full program instructions,
     return an int that represents the desired interpretation.
-    1. Jump markers: (X) is converted to the line where X is marked.
+    1. Jump markers: (((X))) is converted to the line where X is marked.
     2. Fixed point: 1.5f is converted to 1.5 as a fixed point number.
+    3. Negative: -3 is converted to b1101 as 4-bit two's complement.
     """
 
     # Jump marker -- find the marker and go to that line
@@ -131,6 +132,10 @@ def interpret_arg(arg: str, instructions: list) -> int:
     if arg[-1] == "f":
         num = float(arg[:-1])
         return float_to_fixed_point_binary_base10(num)
+    
+    if arg[0] == "-":
+        num = int(arg[1:])
+        return 15 - num
 
     return int(arg) 
 
