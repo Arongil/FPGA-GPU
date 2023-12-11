@@ -1,6 +1,11 @@
 `timescale 1ns / 1ps
 `default_nettype none
 
+// Macros
+`define BRAM_TEMP(FMA_ID, ABC) bram_temp_in[LINE_WIDTH - (FMA_ID*3 + ABC + 1) * WORD_WIDTH +: WORD_WIDTH]
+`define WRITE_BUFFER_OUTPUT(FMA_ID, PHRASE) write_buffer_read_in_buffer[PHRASE*FMA_COUNT*WORD_WIDTH + FMA_ID*WORD_WIDTH +: WORD_WIDTH]
+`define SHUFFLE_VAL(ABC) (reg_vals[12-(ABC+1)*4 +: 4])
+
 module memory #(
     parameter FMA_COUNT = 2,  // number of FMAs to prepare data for in a simultaneous read
     parameter WORD_WIDTH = 16,  // number of bits per number aka width of a word
@@ -140,14 +145,14 @@ module memory #(
                             for (int abc = 0; abc < 3; abc = abc + 1) begin
                                 // reg_vals[12-(abc+1)*4 +: 4] is the same as shuffle1, shuffle2, shuffle3, selected according to abc.
                                 // Every case is the same except for multiplying by 2 or -1 outside.
-                                if (reg_vals[12-(abc+1)*4 +: 4] == 4'b0000) begin // 0 --> 0
-                                    bram_temp_in[LINE_WIDTH - (fma_id*3 + abc + 1) * WORD_WIDTH +: WORD_WIDTH] <= 0;
-                                end else if (reg_vals[12-(abc+1)*4 +: 4] <= 4'b0011) begin // 1, 2, 3 ---> set to corresponding
-                                    bram_temp_in[LINE_WIDTH - (fma_id*3 + abc + 1) * WORD_WIDTH +: WORD_WIDTH] <= write_buffer_read_in_buffer[(reg_vals[12-(abc+1)*4 +: 4]-4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH];
-                                end else if (reg_vals[12-(abc+1)*4 +: 4] <= 4'b0110) begin // 4, 5, 6 ---> set to 2*corresponding
-                                    bram_temp_in[LINE_WIDTH - (fma_id*3 + abc + 1) * WORD_WIDTH +: WORD_WIDTH] <= 2*write_buffer_read_in_buffer[(reg_vals[12-(abc+1)*4 +: 4]-4'b0011-4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH];
-                                end else if (reg_vals[12-(abc+1)*4 +: 4] >= 4'b1101) begin // -1, -2, -3 ---> set to -1*corresponding (two's complement in fixed point space)
-                                    bram_temp_in[LINE_WIDTH - (fma_id*3 + abc + 1) * WORD_WIDTH +: WORD_WIDTH] <= (1<<FIXED_POINT) + ~write_buffer_read_in_buffer[(-reg_vals[12-(abc+1)*4 +: 4]-4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH];
+                                if (`SHUFFLE_VAL(abc) == 4'b0000) begin // 0 --> 0
+                                    `BRAM_TEMP(fma_id, abc) <= 0;
+                                end else if (`SHUFFLE_VAL(abc) <= 4'b0011) begin // 1, 2, 3 ---> set to corresponding
+                                    `BRAM_TEMP(fma_id, abc) <= `WRITE_BUFFER_OUTPUT(fma_id, (`SHUFFLE_VAL(abc) - 4'b0001));
+                                end else if (`SHUFFLE_VAL(abc) <= 4'b0110) begin // 4, 5, 6 ---> set to 2*corresponding
+                                    `BRAM_TEMP(fma_id, abc) <= 2*`WRITE_BUFFER_OUTPUT(fma_id, (`SHUFFLE_VAL(abc) - 4'b0011 - 4'b0001));
+                                end else if (`SHUFFLE_VAL(abc) >= 4'b1101) begin // -1, -2, -3 ---> set to -1*corresponding (two's complement in fixed point space)
+                                    `BRAM_TEMP(fma_id, abc) <= (1<<FIXED_POINT) + ~`WRITE_BUFFER_OUTPUT(fma_id, (-`SHUFFLE_VAL(abc) - 4'b0001));
                                 end else begin
                                     // ERROR
                                 end
@@ -162,7 +167,7 @@ module memory #(
                         //    Load value at controller_reg_b, put into slot instr_in[4:7] = abc (0 -> a, 1 -> b, 2 -> c)
                         //    where FMA_i's value is set to reg_val + i * immediate_diff.
                         for (int fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
-                            bram_temp_in[LINE_WIDTH - (fma_id*3 + instr_in[4:7] + 1) * WORD_WIDTH +: WORD_WIDTH] <= controller_reg_b + fma_id * instr_in[8:23];
+                            `BRAM_TEMP(fma_id, instr_in[4:7]) <= controller_reg_b + fma_id * instr_in[8:23];
                         end
                     end
                     OP_WRITEB: begin
@@ -179,17 +184,17 @@ module memory #(
                     end
                     OP_OR: begin
                         // For each FMA, if its z_i = x_i + y_i has magnitude greater than 2, it has diverged:
-                        // set its mandelbrot_iters slot to iters (instr_in[12:15] == iters >> 4).
+                        // set its mandelbrot_iters slot to iters (controller_reg_a[7:4] == iters >> 4).
                         // However, set mandelbrot_iters only once per FMA, since we are
                         // interested in the first time a point diverges.
-                        // Assume write_buffer_read_in_buffer holds (y_0, x_{i+1}, y_{i+1})
+                        // Assume write_buffer_read_in_buffer holds (y_0, x_{i+1}, y_{i+1}).
                         for (fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
                             if (mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] == 4'b1111) begin
-                                // x_i = write_buffer_read_in_buffer[(4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH];
-                                // y_i = write_buffer_read_in_buffer[(4'b0002)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH];
-                                if ((write_buffer_read_in_buffer[(4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH] * write_buffer_read_in_buffer[(4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH] + write_buffer_read_in_buffer[(4'b0010)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH] * write_buffer_read_in_buffer[(4'b0010)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH]) >> FIXED_POINT >= (16'h0004 << FIXED_POINT)) begin
+                                // x_i = `WRITE_BUFFER_OUTPUT(fma_id, 4'b0001)
+                                // y_i = `WRITE_BUFFER_OUTPUT(fma_id, 4'b0010)
+                                if ((`WRITE_BUFFER_OUTPUT(fma_id, 4'b0001)*`WRITE_BUFFER_OUTPUT(fma_id, 4'b0001) + `WRITE_BUFFER_OUTPUT(fma_id, 4'b0010)*`WRITE_BUFFER_OUTPUT(fma_id, 4'b0010)) >> FIXED_POINT >= (16'h0004 << FIXED_POINT)) begin
                                     // If (x_i * x_i + y_i * y_i >= 4), the point diverged.
-                                    mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] <= instr_in[12:15];
+                                    mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] <= controller_reg_a[7:4]; // same as iters >> 4
                                 end
                             end
                         end

@@ -91,7 +91,7 @@ module controller #(
         OP_WRITE = 4'b1100,    // write(replace_c, fma_valid)
                                //     Write directly from temporary register in memory module to FMAs.
                                //     Arguments replace_c and fma_valid are the same as in writeb.
-        OP_OR       = 4'b1101, // or(iter_imm):
+        OP_OR       = 4'b1101, // or(iter):
                                //    for every (x, y) pair in the
                                //    fma_write_buffer value that we catch in
                                //    the memory module, set the corresponding
@@ -99,7 +99,7 @@ module controller #(
                                //    iter if mandelbrot_iters[i] == 15 and |x| >
                                //    = 2 or |y| >= 2. mandelbrot_iters[i] is
                                //    whether i^th FMA's pixel has diverged.
-                               //    Note that iter is a register, and we use
+                               //    Note that iter is a reg_a, and we use
                                //    the value in that register divided by 8.
                                //    We divide by 8 to squeeze more iterations
                                //    into 4 bits.
