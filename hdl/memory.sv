@@ -194,6 +194,12 @@ module memory #(
                             end
                         end
                     end
+                    OP_SENDITERS: begin
+                        // Send mandelbrot_iters to dual frame buffer
+                        
+                        // Reset mandelbrot_iters to all ones
+                        mandelbrot_iters <= -1;
+                    end
                 endcase
             end
         end
