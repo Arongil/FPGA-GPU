@@ -72,7 +72,7 @@ str_to_command = {
     "load": load,
     "writeb": writeb,
     "write": write,
-    "op_or": op_or,
+    "or": op_or,
     "senditers": senditers,
 }
 
@@ -173,7 +173,7 @@ def str_to_isa(program: str):
             except:
                 raise ValueError(f"Invalid number of arguments on line {line_num}:\n\t{instruction}")
         else:
-            raise ValueError(f"Didn't recognize command {unrecognized}")
+            raise ValueError(f"Didn't recognize command {op_name}")
         # Format the 32 bit binary number as an 8 bit hex string
         isa_commands.append(f"{command:08x}")
 

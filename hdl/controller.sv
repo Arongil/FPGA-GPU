@@ -55,47 +55,47 @@ module controller #(
         OP_END     = 4'b0001,  // end execution 
         OP_XOR     = 4'b0010,  // xor(a_reg, b_reg):
                                //    Places bitwise xor in a_reg
-        OP_ADDI    = 4'b0011,  // addi(a_reg, b_reg, val):
-                               //    Places sum of b_reg and val in a_reg
-        OP_BGE     = 4'b0100,  // bge(a_reg, b_reg):
-                               //    Sets compare_reg to 1 iff a_reg >= b_reg
-        OP_JUMP    = 4'b0101,  // jump(jump_to):
-                               //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
-        OP_SMA     = 4'b0110,  // sma(val):
-                               //    Set memory address to the immediate val in the data cache. (FUTURE IMPROVEMENT: DELETE SMA AND MERGE WITH SENDL)
-        OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
-                               //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_SENDL   = 4'b1000,  // sendl(addr):
-                               //    Send line into the BRAM at memory address addr.
-        OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
-                               //    Load FMA buffer contents into the immediate addr in the data cache.
-                               //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
-                               //       Shuffle is three register values of the form xxx, where x is in the set {-3, -2, -1, 0, 1, 2, 3}.
-                               //       The x's represent the previous three outputs of each FMA, where negative means 2's complement and 0 means to place all zeros. Example:
-                               //           shuffle = 1 2 0 means set memory address to "a b 0" from the FMAs
-                               //           shuffle = -3 3 1 means set memory address to "-c c a" from the FMAs
-                               //       Additionally, the values {4, 5, 6} are allowed. These correspond to 2*a, 2*b, 2*c.
-                               //       Shuffle operates on the previous k results of each FMA independently.
-                               //       The number k of past results is a parameter that we set to 3 for now.
-        OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):
-                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
-        OP_WRITEB  = 4'b1011,  // writeb(val, replace_c, fma_valid):
-                               //    Write contents of immediate addr in the data cache to FMA blocks. 
-                               //    The replace_c value is the bits of reg_a.
-                               //    If replace_c is 4'b0000, FMAs will use previous c values.
-                               //    If replace_c is 4'b0001, FMAs will use memory c values.
-                               //    The fma_valid value is the bits of reg_b.
-                               //    If fma_valid is 4'b0000, the FMAs will not output results.
-                               //    If fma_valid is 4'b0001, the FMAs will output their results.
-                               //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
-        OP_WRITE = 4'b1100,    // write(replace_c, fma_valid)
-                               //     Write directly from temporary register in memory module to FMAs.
-                               //     Arguments replace_c and fma_valid are the same as in writeb.
-        OP_OR       = 4'b1101, // or(iter):
-                               //    for every (x, y) pair in the
-                               //    fma_write_buffer value that we catch in
-                               //    the memory module, set the corresponding
-                               //    mandelbrot_iters local logic in memory to
+            OP_ADDI    = 4'b0011,  // addi(a_reg, b_reg, val):
+                                   //    Places sum of b_reg and val in a_reg
+            OP_BGE     = 4'b0100,  // bge(a_reg, b_reg):
+                                   //    Sets compare_reg to 1 iff a_reg >= b_reg
+            OP_JUMP    = 4'b0101,  // jump(jump_to):
+                                   //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
+            OP_SMA     = 4'b0110,  // sma(val):
+                                   //    Set memory address to the immediate val in the data cache. (FUTURE IMPROVEMENT: DELETE SMA AND MERGE WITH SENDL)
+            OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
+                                   //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
+            OP_SENDL   = 4'b1000,  // sendl(addr):
+                                   //    Send line into the BRAM at memory address addr.
+            OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
+                                   //    Load FMA buffer contents into the immediate addr in the data cache.
+                                   //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
+                                   //       Shuffle is three register values of the form xxx, where x is in the set {-3, -2, -1, 0, 1, 2, 3}.
+                                   //       The x's represent the previous three outputs of each FMA, where negative means 2's complement and 0 means to place all zeros. Example:
+                                   //           shuffle = 1 2 0 means set memory address to "a b 0" from the FMAs
+                                   //           shuffle = -3 3 1 means set memory address to "-c c a" from the FMAs
+                                   //       Additionally, the values {4, 5, 6} are allowed. These correspond to 2*a, 2*b, 2*c.
+                                   //       Shuffle operates on the previous k results of each FMA independently.
+                                   //       The number k of past results is a parameter that we set to 3 for now.
+            OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):
+                                   //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+            OP_WRITEB  = 4'b1011,  // writeb(val, replace_c, fma_valid):
+                                   //    Write contents of immediate addr in the data cache to FMA blocks. 
+                                   //    The replace_c value is the bits of reg_a.
+                                   //    If replace_c is 4'b0000, FMAs will use previous c values.
+                                   //    If replace_c is 4'b0001, FMAs will use memory c values.
+                                   //    The fma_valid value is the bits of reg_b.
+                                   //    If fma_valid is 4'b0000, the FMAs will not output results.
+                                   //    If fma_valid is 4'b0001, the FMAs will output their results.
+                                   //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
+            OP_WRITE = 4'b1100,    // write(replace_c, fma_valid)
+                                   //     Write directly from temporary register in memory module to FMAs.
+                                   //     Arguments replace_c and fma_valid are the same as in writeb.
+            OP_OR       = 4'b1101, // or(iter):
+                                   //    for every (x, y) pair in the
+                                   //    fma_write_buffer value that we catch in
+                                   //    the memory module, set the corresponding
+                                   //    mandelbrot_iters local logic in memory to
                                //    iter if mandelbrot_iters[i] == 15 and |x| >
                                //    = 2 or |y| >= 2. mandelbrot_iters[i] is
                                //    whether i^th FMA's pixel has diverged.
@@ -244,6 +244,7 @@ module controller #(
                         OP_JUMP: begin
                             if (compare_reg) begin
                                 instr_ready <= 0; // force two-cycle read for new instruction_index
+                                compare_reg <= 0;
                                 instruction_index <= instr[8:23];
                             end
                         end

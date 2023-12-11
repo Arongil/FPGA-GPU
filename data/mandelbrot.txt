@@ -24,14 +24,15 @@
 #   - The bits represent num_iters / 8, so that the range [0, 127] is represented.
 
 # Step 1: Set up mesh of grid points to render
+
+# DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
+# DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
 xor 0 0               # zero out register 0
 addi 2 0 160          # HEIGHT = 160: set register 2 to 160
 addi 3 0 320          # WIDTH = 320: set register 3 to 320
 addi 4 0 -2f          # X_MIN = -2 (f notation compiles into fixed-point)
-#addi 5 0 0.0078125f  # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
-addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
-#addi 7 0 0.015625f   # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
 addi 5 0 127          # MAX_ITERS = 127 (register 5)
+addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
 
 # Step 2: Loop over all grid points
 #   - Use register 8 as x_counter
@@ -76,15 +77,13 @@ jump (((3)))           # jump to (3)
 # We will place these values into memory in such a way that we can enter one
 # final for loop, in which we will compute num_iters.
 
-# We will always perform Mandelbrot calculations in lines 1-3 of memory.
-# Mandelbrot results will go in the last XXXX bits of memory.
-sma 1        # set memory address to line 1
+# We will always perform Mandelbrot calculations in the bram_temp_in buffer inside the memory module.
 # First, output just y_0 into both FMAs for later use.
 load 0 0 0           # load 0 into FMA "a" values (diff 0 per FMA)
 load 1 0 0           # load 0 into FMA "b" values (diff 0 per FMA)
-load 2 11 0.015625f  # load y_0 into FMA_1 "c"    (diff DY per FMA)
+load 2 11 0.015625f  # load y_0 into FMA "c"      (diff DY per FMA)
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
-# Next, let's ouput just x_0 into both FMAs for later use.
+# Next, let's output just x_0 into both FMAs for later use.
 load 0 0 0   # load 0 into FMA "a" values
 load 1 0 0   # load 0 into FMA "b" values
 load 2 10 0  # load x_val into FMA "c" values
@@ -92,7 +91,7 @@ write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
 # Finally, output just y_0 again into both FMAs for later use.
 load 0 0 0           # load 0 into FMA "a" values (diff 0 per FMA)
 load 1 0 0           # load 0 into FMA "b" values (diff 0 per FMA)
-load 2 11 0.015625f  # load y_0 into FMA_1 "c"    (diff DY per FMA)
+load 2 11 0.015625f  # load y_0 into FMA "c"      (diff DY per FMA)
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
 
 # NOW: the write buffer will send THREE values for each FMA:
@@ -106,9 +105,9 @@ write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
 or 0     # record whether points diverged by iteration 0
 
 # Register 15 will hold the iter value
-addi 15 0 1   # iters = 1: set register 15 to value 1
-bge 15 5      # if iters >= 127
-jump (((5)))  # jump to (5) [JUMP MARKER 6]
+addi 15 0 1   # iters = 1
+bge 15 5      # if iters >= 127 [JUMP MARKER 6]
+jump (((5)))  # jump to (5)
 
 # <mandelbrot for loop>
 
@@ -155,13 +154,11 @@ senditers 14  # send to line addr_to_send of frame buffer the mandelbrot_iters
 
 # </FOR LOOP Y: INNER LOGIC>
 
-addi 11 11 0.015625f   # increment y_val by DY  (FMA_1 DONE)
-addi 11 11 0.015625f   # increment y_val by DY (twice for two FPGAs)
+addi 11 11 0.03125f    # increment y_val by 2*DY (FMA_COUNT*DY)
 addi 14 14 2           # increment addr_for_iters by FMA_COUNT = 2
 addi 9 9 1             # increment y_counter by 1
 bge 0 0                # prepare to jump (compare 0 >= 0)
-jump (((2)))           # jump to (2)
-nop                    # [JUMP MARKER 3]
+jump (((2)))           # jump to (2) [JUMP MARKER 3]
 
 # </FOR LOOP Y>
 
@@ -170,8 +167,7 @@ nop                    # [JUMP MARKER 3]
 addi 10 10 0.0078125f  # increment x_val by DX
 addi 8 8 1             # increment x_counter by 1
 bge 0 0                # prepare to jump (compare 0 >= 0)
-jump (((0)))           # jump to (0)
-nop                    # [JUMP MARKER 1]
+jump (((0)))           # jump to (0) [JUMP MARKER 1]
 
 # </FOR LOOP X>
 
