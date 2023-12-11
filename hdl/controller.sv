@@ -91,7 +91,7 @@ module controller #(
         OP_WRITE = 4'b1100,    // write(replace_c, fma_valid)
                                //     Write directly from temporary register in memory module to FMAs.
                                //     Arguments replace_c and fma_valid are the same as in writeb.
-        OP_OR       = 4'b1101, // or(iter):
+        OP_OR       = 4'b1101, // or(iter_imm):
                                //    for every (x, y) pair in the
                                //    fma_write_buffer value that we catch in
                                //    the memory module, set the corresponding

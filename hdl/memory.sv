@@ -73,6 +73,9 @@ module memory #(
     logic [3*4-1:0] reg_vals;
     assign reg_vals = {instr_in[4:7], instr_in[24:27], instr_in[28:31]};
 
+    // mandelbrot_iters holds 4 bits per FMA (0-15)
+    logic [4*FMA_COUNT-1:0] mandelbrot_iters;
+
     logic [ADDR_LENGTH - 1 : 0] addr;
     logic [LINE_WIDTH - 1 : 0] bram_temp_in; // accumulating stuff to put into BRAM
     logic [LINE_WIDTH - 1 : 0] bram_in; // BRAM listens to this line
@@ -92,6 +95,7 @@ module memory #(
             bram_write <= 0;
             bram_write_ready <= 0;
             write_buffer_read_in_buffer <= 0;
+            mandelbrot_iters <= -1; // all ones
         end else begin
             if (write_buffer_valid_in) begin
                 write_buffer_read_in_buffer <= write_buffer_read_in;
@@ -134,7 +138,8 @@ module memory #(
                         //   The two steps to select out are (shuffle * FMA_COUNT*WORD_WIDTH) and (fma_id * WORD_WIDTH)
                         for (int fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
                             for (int abc = 0; abc < 3; abc = abc + 1) begin
-                                // reg_vals[12-(abc+1)*4 +: 4] is the same as shuffle1, shuffle2, shuffle3, selected according to abc
+                                // reg_vals[12-(abc+1)*4 +: 4] is the same as shuffle1, shuffle2, shuffle3, selected according to abc.
+                                // Every case is the same except for multiplying by 2 or -1 outside.
                                 if (reg_vals[12-(abc+1)*4 +: 4] == 4'b0000) begin // 0 --> 0
                                     bram_temp_in[LINE_WIDTH - (fma_id*3 + abc + 1) * WORD_WIDTH +: WORD_WIDTH] <= 0;
                                 end else if (reg_vals[12-(abc+1)*4 +: 4] <= 4'b0011) begin // 1, 2, 3 ---> set to corresponding
@@ -171,6 +176,23 @@ module memory #(
                         fma_output_can_be_valid_out <= (instr_in[24:27] == 4'b0001);
                         abc_out <= bram_temp_in;
                         abc_valid_out <= 1'b1;
+                    end
+                    OP_OR: begin
+                        // For each FMA, if its z_i = x_i + y_i has magnitude greater than 2, it has diverged:
+                        // set its mandelbrot_iters slot to iters (instr_in[12:15] == iters >> 4).
+                        // However, set mandelbrot_iters only once per FMA, since we are
+                        // interested in the first time a point diverges.
+                        // Assume write_buffer_read_in_buffer holds (y_0, x_{i+1}, y_{i+1})
+                        for (fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
+                            if (mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] == 4'b1111) begin
+                                // x_i = write_buffer_read_in_buffer[(4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH];
+                                // y_i = write_buffer_read_in_buffer[(4'b0002)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH];
+                                if ((write_buffer_read_in_buffer[(4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH] * write_buffer_read_in_buffer[(4'b0001)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH] + write_buffer_read_in_buffer[(4'b0010)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH] * write_buffer_read_in_buffer[(4'b0010)*FMA_COUNT*WORD_WIDTH + fma_id * WORD_WIDTH +: WORD_WIDTH]) >> FIXED_POINT >= (16'h0004 << FIXED_POINT)) begin
+                                    // If (x_i * x_i + y_i * y_i >= 4), the point diverged.
+                                    mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] <= instr_in[12:15];
+                                end
+                            end
+                        end
                     end
                 endcase
             end

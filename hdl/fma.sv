@@ -23,7 +23,7 @@ module fma #(
     assign b = abc[2*WIDTH-1:1*WIDTH];
 
      // set to 1'b1 for integer arithmetic, 1'b0 for fixed point arithmetic
-    localparam INTEGER_ARITHMETIC = 1'b1;
+    localparam INTEGER_ARITHMETIC = 1'b0;
 
     always_comb begin
         multiplication_full_precision = (
