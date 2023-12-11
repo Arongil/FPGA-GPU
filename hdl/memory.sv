@@ -15,6 +15,9 @@ module memory #(
     // ADDR_LENGTH needs only 9 bits for now (since we are reading entire lines), which lives in the immediate section of the instr
     input wire clk_in,
     input wire rst_in,
+    input wire [15:0] controller_reg_a,
+    input wire [15:0] controller_reg_b,
+    input wire [15:0] controller_reg_c,
     input wire [LINE_WIDTH - 1 : 0] write_buffer_read_in,
     input wire write_buffer_valid_in,
     // We assume that the buffer will keep the valid flag high until memory reads the content and go idle
@@ -51,6 +54,9 @@ module memory #(
                                //    Send line at memory address into the BRAM.
         OP_LOADB   = 4'b1001,  // loadb(val):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
+        OP_LOAD    = 4'b1101,  // load(abc, reg_b, diff):
+                               //    Load value at controller reg_b into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). 
+                               //    where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
         OP_WRITEB  = 4'b1010   // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
@@ -129,34 +135,50 @@ module memory #(
                         addr <= instr_in[8:23];
                         bram_write <= 1'b1;
                     end
+                    OP_LOAD: begin
+                        // load(abc, reg_b, diff):
+                        //    Load value at controller reg_b into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). 
+                        //    where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+                        //    abc is at reg 0, which is instr_in[4:7]
+                        //    reg_b is at reg 1, which is instr_in[24:27]
+                        //    diff is at imm, which is instr_in[8:23] 
+                        //    bram_temp_in[(i * FMA_COUNT + 16 * (j + 1) - 1) : (i * FMA_COUNT + 16 * j)]
+                        //    (instr_in[24:27] == 0) ? (controller_reg_a) : ((instr_in[24:27] == 1) ? (controller_reg_b) : (controller_reg_c));
+                        //    (j[31:28] == instr_in[4:7]) ? (controller_reg[instr_in[27:24]] + i * instr_in[8:23] ) : (abc_valid_out[i * FMA_COUNT + j])
+                        for (int i = 0; i < FMA_COUNT; i = i + 1) begin
+                            for (int j = 0; j < 3; j = j + 1) begin
+                                bram_temp_in[15 : 0] <= (j[31:28] == instr_in[4:7]) ? ((instr_in[24:27] == 0) ? (controller_reg_a) : ((instr_in[24:27] == 1) ? (controller_reg_b) : (controller_reg_c)) + i * instr_in[8:23]) : (bram_temp_in[i * FMA_COUNT + j]);
+                            end
+                        end
+                    end
                 endcase
             end
         end
     end
 
-    xilinx_true_dual_port_read_first_2_clock_ram #(
-        .RAM_WIDTH(LINE_WIDTH),                       // Specify RAM data width
-        .RAM_DEPTH(36000 / LINE_WIDTH),                     // Specify RAM depth (number of entries)
-        .RAM_PERFORMANCE("HIGH_PERFORMANCE"), // Select "HIGH_PERFORMANCE" or "LOW_LATENCY"
-        .INIT_FILE("")                        // Specify name/location of RAM initialization file if using one (leave blank if not)
-    ) memory_BRAM (
-        .addra(addr),   // Port A address bus, width determined from RAM_DEPTH
-        .dina(bram_in),     // Port A RAM input data, width determined from RAM_WIDTH
-        .clka(clk_in),     // Port A clock
-        .wea(bram_read),       // Port A write enable
-        .ena(1'b1),       // Port A RAM Enable, for additional power savings, disable port when not in use
-        .rsta(1'b0),     // Port A output reset (does not affect memory contents)
-        .regcea(bram_write), // Port A output register enable
-        .douta(abc_out),   // Port A RAM output data, width determined from RAM_WIDTH
-        .addrb(),   // Port B address bus, width determined from RAM_DEPTH
-        .dinb(),     // Port B RAM input data, width determined from RAM_WIDTH
-        .clkb(),     // Port B clock
-        .web(),       // Port B write enable
-        .enb(),       // Port B RAM Enable, for additional power savings, disable port when not in use
-        .rstb(),     // Port B output reset (does not affect memory contents)
-        .regceb(), // Port B output register enable
-        .doutb()    // Port B RAM output data, width determined from RAM_WIDTH
-    );
+    // xilinx_true_dual_port_read_first_2_clock_ram #(
+    //     .RAM_WIDTH(LINE_WIDTH),                       // Specify RAM data width
+    //     .RAM_DEPTH(36000 / LINE_WIDTH),                     // Specify RAM depth (number of entries)
+    //     .RAM_PERFORMANCE("HIGH_PERFORMANCE"), // Select "HIGH_PERFORMANCE" or "LOW_LATENCY"
+    //     .INIT_FILE("")                        // Specify name/location of RAM initialization file if using one (leave blank if not)
+    // ) memory_BRAM (
+    //     .addra(addr),   // Port A address bus, width determined from RAM_DEPTH
+    //     .dina(bram_in),     // Port A RAM input data, width determined from RAM_WIDTH
+    //     .clka(clk_in),     // Port A clock
+    //     .wea(bram_read),       // Port A write enable
+    //     .ena(1'b1),       // Port A RAM Enable, for additional power savings, disable port when not in use
+    //     .rsta(1'b0),     // Port A output reset (does not affect memory contents)
+    //     .regcea(bram_write), // Port A output register enable
+    //     .douta(abc_out),   // Port A RAM output data, width determined from RAM_WIDTH
+    //     .addrb(),   // Port B address bus, width determined from RAM_DEPTH
+    //     .dinb(),     // Port B RAM input data, width determined from RAM_WIDTH
+    //     .clkb(),     // Port B clock
+    //     .web(),       // Port B write enable
+    //     .enb(),       // Port B RAM Enable, for additional power savings, disable port when not in use
+    //     .rstb(),     // Port B output reset (does not affect memory contents)
+    //     .regceb(), // Port B output register enable
+    //     .doutb()    // Port B RAM output data, width determined from RAM_WIDTH
+    // );
 endmodule
 
 

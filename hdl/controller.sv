@@ -104,6 +104,13 @@ module controller #(
                                //    Write mandelbrot_iters to the address at
                                //    the value of a_reg in the
                                //    frame buffer, ready to be colored in!
+                               //   Note that mandelbrot_iter has width FMA_COUNT 
+                               //   i.e. FMA_COUNT concurrent pixels
+                               //   Note that mandelbrot_iters has width FMA_COUNT
+                               //   and stores the (number of iteration / 8) before
+                               //   the value of the pixel diverges. The default 
+                               //   value is 15, i.e. no divergence. Due to space 
+                               //   constraints, mandelbrot_iters is 16 bits per FMA.
     } isa;
 
     enum {
