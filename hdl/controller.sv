@@ -180,11 +180,18 @@ module controller #(
         .rstb(rst_in)                    // Reset wire
     );
 
-    // Execute instructions
+    // Track which instruction we are executing
     logic instr_ready, just_used_prefetch;
     logic [0:INSTRUCTION_WIDTH-1] instr;
     assign instr = current_instruction; // redesign once we do prefetching
     assign instr_out = current_instruction;
+    
+    // Output the three register values that the current instruction references for other modules to use.
+    assign reg_a_out = registers[instr[4:7]];
+    assign reg_b_out = registers[instr[24:27]];
+    assign reg_c_out = registers[instr[28:31]];
+
+    // Execute instructions
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
             state <= LOAD_INSTRUCTION;
@@ -266,20 +273,20 @@ module controller #(
                         //end
                     end
 
-                    // Tell other modules when their instructions are valid.
-                    // 1. Memory (op code is NOP, SMA, LOADI, SENDL, LOADB, or WRITEB)
-                    // 2. HDMI (to be implemented)
-                    instr_valid_for_memory_out <= 1'b1; //(
-                        //instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
-                        //instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
-                        //instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB ||
-                        //instr[0:3] == OP_LOAD  || instr[0:3] == OP_WRITE
-                    //);
                 end
 
                 default: begin
                 end
             endcase
+            // Tell other modules when their instructions are valid.
+            // 1. Memory (op code is NOP, SMA, LOADI, SENDL, LOADB, or WRITEB)
+            // 2. HDMI (to be implemented)
+            instr_valid_for_memory_out <= state == EXECUTE_INSTRUCTION; //(
+                //instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
+                //instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
+                //instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB ||
+                //instr[0:3] == OP_LOAD  || instr[0:3] == OP_WRITE
+            //);
         end
     end
 

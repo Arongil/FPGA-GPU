@@ -6,7 +6,7 @@ module top_level_tb;
     localparam PRIVATE_REG_WIDTH=16;
     localparam PRIVATE_REG_COUNT=16;
     localparam INSTRUCTION_WIDTH=32;
-    localparam INSTRUCTION_COUNT=57;    // UPDATE TO MATCH PROGRAM_FILE!
+    localparam INSTRUCTION_COUNT=61;    // UPDATE TO MATCH PROGRAM_FILE!
     localparam DATA_CACHE_WIDTH=16;
     localparam DATA_CACHE_DEPTH=4096;
 
@@ -159,7 +159,11 @@ module top_level_tb;
         #10;
 
         for (int cycle = 0; cycle < CYCLES_TO_RUN; cycle = cycle + 1) begin
-            $display("State %1d | Executing %4b", controller_module.state, controller_module.instr[0:3]);
+            if (cycle < 10 || CYCLES_TO_RUN - cycle < 10) begin
+                $display("State %1d | Executing %4b", controller_module.state, controller_module.instr[0:3]);
+            end else if (cycle == 10) begin
+                $display("...\n...\n...");
+            end
             #10;
         end
 

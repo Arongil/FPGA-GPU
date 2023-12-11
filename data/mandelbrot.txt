@@ -50,7 +50,7 @@ addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
 #     }
 #   }
 
-xor 14 14              # zero out register 14 (addr_for_iters
+xor 14 14              # zero out register 14 (addr_for_iters)
 
 # <FOR LOOP X>
 
@@ -78,34 +78,33 @@ jump (((3)))           # jump to (3)
 # final for loop, in which we will compute num_iters.
 
 # We will always perform Mandelbrot calculations in the bram_temp_in buffer inside the memory module.
-# First, output just y_0 into both FMAs for later use.
-load 0 0 0           # load 0 into FMA "a" values (diff 0 per FMA)
-load 1 0 0           # load 0 into FMA "b" values (diff 0 per FMA)
-load 2 11 0.015625f  # load y_0 into FMA "c"      (diff DY per FMA)
-write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
-# Next, let's output just x_0 into both FMAs for later use.
-load 0 0 0   # load 0 into FMA "a" values
-load 1 0 0   # load 0 into FMA "b" values
+# First, output just x_0 into both FMAs for later use.
+load 0 0 0   # load 0 into FMA "a" values (diff 0 per FMA)
+load 1 0 0   # load 0 into FMA "b" values (diff 0 per FMA)
 load 2 10 0  # load x_val into FMA "c" values
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
-# Finally, output just y_0 again into both FMAs for later use.
-load 0 0 0           # load 0 into FMA "a" values (diff 0 per FMA)
-load 1 0 0           # load 0 into FMA "b" values (diff 0 per FMA)
+# Next, output just y_val into both FMAs for later use.
 load 2 11 0.015625f  # load y_0 into FMA "c"      (diff DY per FMA)
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
+# Finally, let's output the squared magnitude of z_0 = x_0 + y_0.
+load 0 10 0  # load x_val into FMA "a" values
+load 1 10 0  # load x_val into FMA "b" values
+load 2 0 0   # load 0 into FMA "c" values
+write 1 0    # send loaded buffer to the FMAs! (replace_c, not fma_valid_out)
+load 0 11 0.015625f # load y_0 into FMA "a"       (diff DY per FMA)
+load 1 11 0.015625f # load y_0 into FMA "b"       (diff DY per FMA)
+write 0 1    # send loaded buffer to the FMAs! (not replace c, fma_valid_out)
+nop          # stall for final value to write
 
 # NOW: the write buffer will send THREE values for each FMA:
-#   1. y_0
-#   2. x_i
-#   3. y_i
+#   1. x_i
+#   2. y_i
+#   3. x_0*x_0 + y_0*y_0
 # Shuffle should select out (x_i, y_i).
 # Shuffle should also select (2x_i, -y_i).
 
-# Check whether we have diverged
-or 0     # record whether points diverged by iteration 0
-
 # Register 15 will hold the iter value
-addi 15 0 1   # iters = 1
+addi 15 0 0   # iters = 0
 bge 15 5      # if iters >= 127 [JUMP MARKER 6]
 jump (((5)))  # jump to (5)
 
@@ -116,22 +115,26 @@ jump (((5)))  # jump to (5)
 # 2. We compute the next iteration of the Mandelbrot formula.
 # 3. Then we OP_OR to record any new divergences.
 
-# First, we preserve the first FMA output as again y_0.
-loadb 1 0 0 1  # set line 1 of memory to "0 0 y_0" (0 0 1)
-write 1 1      # send loaded buffer to FMAs! (replace_c, fma_valid_out)
-
 # Let's compute x*x + x_0 (TEMP x_{i+1})
-loadb 1 2 2 0  # set line 1 of memory to "x_i x_i 0" (2 2 0)
+loadb 1 1 0    # set buffer to "x_i x_i 0" (1 1 0)
 load 2 10 0    # load x_val = x_0 into "c" values
 write 1 0      # send loaded buffer to FMAs! (replace_c, not fma_valid_out)
 
 # Let's compute x*x - y*y + y_0 (FULL x_{i+1})
-loadb 1 -3 3 0 # set line 1 of memory to "-y_i y_i 0"
-write 0 1   # send loaded buffer to FMAs! (not replace_c, fma_valid_out)
+loadb -2 2 0   # set buffer to "-y_i y_i 0" (-2 2 0)
+write 0 1      # send loaded buffer to FMAs! (not replace_c, fma_valid_out)
 
 # Let's compute 2*x*y + y_0 (FULL y_{i+1})
-loadb 1 4 3 1  # set line 1 of memory to "2*x_i y_i y_0"
-write 1 1      # send loaded buffer to FMAs! (replace_c, fma_valid_out)
+loadb 4 2 0         # set buffer to "2*x_i y_i 0" (4 2 0)
+load 2 11 0.015625f # load y_0 into FMA "c"       (diff DY per FMA)
+write 1 1           # send loaded buffer to FMAs! (replace_c, fma_valid_out)
+
+# Let's compute x*x + y*y (magnitude of z_i)
+loadb 1 1 0    # set buffer to "x_i x_i 0" (1 1 0)
+write 1 0      # send loaded buffer to FMAs! (replace_c, not fma_valid_out)
+loadb 2 2 0    # set buffer to "y_i y_i 0" (2 2 0)
+write 0 1      # send loaded buffer to FMAs! (not replace_c, fma_valid_out)
+nop            # stall for results to flush out from write buffer
 
 # NOW: the write buffer will send THREE values for each FMA:
 #   1. y_0
@@ -146,7 +149,7 @@ addi 15 15 1  # increment iters by 1
 bge 0 0       # prepare to jump (compare 0 >= 0)
 jump (((6)))  # jump to (6) [JUMP MARKER 5]
 
-# SEND THE MANDEBROT_ITERS ARRAY TO FRAME BUFFER AT THE PROPER ADDRESS
+# SEND THE MANDELBROT_ITERS ARRAY TO FRAME BUFFER AT THE PROPER ADDRESS
 
 # do a register computation to create a register that is col-major order for the frame buffer, then write to that register (14)
 # addr = x_count * WIDTH + y_count

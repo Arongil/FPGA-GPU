@@ -40,8 +40,8 @@ def loadi(a_reg, val):
 def sendl():
     return (0b1000 << 28)
 
-def loadb(val, shuffle1, shuffle2, shuffle3):
-    return (0b1001 << 28) + (shuffle1 << 24) + (val << 8) + (shuffle2 << 4) + (shuffle3 << 0)
+def loadb(shuffle1, shuffle2, shuffle3):
+    return (0b1001 << 28) + (shuffle1 << 24) + (shuffle2 << 4) + (shuffle3 << 0)
 
 def load(abc, b_reg, diff):
     return (0b1010 << 28) + (abc << 24) + (diff << 8) + (b_reg << 4)
@@ -135,7 +135,7 @@ def interpret_arg(arg: str, instructions: list) -> int:
     
     if arg[0] == "-":
         num = int(arg[1:])
-        return 15 - num
+        return 16 - num
 
     return int(arg) 
 
