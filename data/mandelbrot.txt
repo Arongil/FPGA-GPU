@@ -28,18 +28,19 @@
 # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
 # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
 xor 0 0               # zero out register 0
-addi 2 0 160          # HEIGHT = 160: set register 2 to 160
-addi 3 0 320          # WIDTH = 320: set register 3 to 320
+addi 2 0 8#160          # HEIGHT = 160: set register 2 to 160
+addi 3 0 2#320          # WIDTH = 320: set register 3 to 320
 addi 4 0 -2f          # X_MIN = -2 (f notation compiles into fixed-point)
-addi 5 0 127          # MAX_ITERS = 127 (register 5)
+addi 5 0 2 #127          # MAX_ITERS = 127 (register 5)
 addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
+
+# FREE REGISTERS: reg 7, reg 12
 
 # Step 2: Loop over all grid points
 #   - Use register 8 as x_counter
 #   - Use register 9 as y_counter
 #   - Use register 10 as x_val
 #   - Use register 11 as y_val
-#   - Use register 12 as minus_y_val
 #   - Use register 14 as addr_for_iters
 #   - Increment x_val and y_val by DX and DY
 # We will implement the following pseudocode:
@@ -56,18 +57,17 @@ xor 14 14              # zero out register 14 (addr_for_iters
 xor 8 8                # set x_counter = 0
 addi 10 4 0            # set x_val to X_MIN
 
-bge 2 8                # branch if WIDTH >= x_counter [JUMP MARKER 0]
+bge 8 3                # branch if x_counter >= WIDTH [JUMP MARKER 0]
 jump (((1)))           # jump to (1)
 
 # <FOR LOOP X: INNER LOGIC>
 
 # <FOR LOOP Y>
 
-xor 9 9                # zero out register 9
+xor 9 9                # set y_counter = 0
 addi 11 6 0            # set y_val to Y_MIN
-addi 12 6 0            # set minus_y_val to -Y_MIN
 
-bge 3 9                # branch if HEIGHT >= y_counter [JUMP MARKER 2]
+bge 9 2                # branch if y_counter >= HEIGHT [JUMP MARKER 2]
 jump (((3)))           # jump to (3)
 
 # <FOR LOOP Y: INNER LOGIC>
@@ -156,7 +156,7 @@ senditers 14  # send to line addr_to_send of frame buffer the mandelbrot_iters
 
 addi 11 11 0.03125f    # increment y_val by 2*DY (FMA_COUNT*DY)
 addi 14 14 2           # increment addr_for_iters by FMA_COUNT = 2
-addi 9 9 1             # increment y_counter by 1
+addi 9 9 2             # increment y_counter by FMA_COUNT = 2
 bge 0 0                # prepare to jump (compare 0 >= 0)
 jump (((2)))           # jump to (2) [JUMP MARKER 3]
 

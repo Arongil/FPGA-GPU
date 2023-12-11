@@ -51,17 +51,24 @@ module memory #(
         OP_JUMP    = 4'b0101,  // jump(jump_to):
                                //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
         OP_SMA     = 4'b0110,  // sma(val):
-                               //    Set memory address to the immediate val in the data cache.
+                               //    Set memory address to the immediate val in the data cache. (FUTURE IMPROVEMENT: DELETE SMA AND MERGE WITH SENDL)
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_SENDL   = 4'b1000,  // sendl():
-                               //    Send line at memory address into the BRAM.
-        OP_LOADB   = 4'b1001,  // loadb(val):
+        OP_SENDL   = 4'b1000,  // sendl(addr):
+                               //    Send line into the BRAM at memory address addr.
+        OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
-        OP_LOAD    = 4'b1101,  // load(abc, reg_b, diff):
-                               //    Load value at controller reg_b into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). 
-                               //    where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
-        OP_WRITEB  = 4'b1010   // writeb(val, replace_c, fma_valid):
+                               //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
+                               //       Shuffle is three register values of the form xxx, where x is in the set {-3, -2, -1, 0, 1, 2, 3}.
+                               //       The x's represent the previous three outputs of each FMA, where negative means 2's complement and 0 means to place all zeros. Example:
+                               //           shuffle = 1 2 0 means set memory address to "a b 0" from the FMAs
+                               //           shuffle = -3 3 1 means set memory address to "-c c a" from the FMAs
+                               //       Additionally, the values {4, 5, 6} are allowed. These correspond to 2*a, 2*b, 2*c.
+                               //       Shuffle operates on the previous k results of each FMA independently.
+                               //       The number k of past results is a parameter that we set to 3 for now.
+        OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):
+                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+        OP_WRITEB  = 4'b1011,  // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
                                //    If replace_c is 4'b0000, FMAs will use previous c values.
@@ -70,9 +77,32 @@ module memory #(
                                //    If fma_valid is 4'b0000, the FMAs will not output results.
                                //    If fma_valid is 4'b0001, the FMAs will output their results.
                                //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
+        OP_WRITE = 4'b1100,    // write(replace_c, fma_valid)
+                               //     Write directly from temporary register in memory module to FMAs.
+                               //     Arguments replace_c and fma_valid are the same as in writeb.
+        OP_OR       = 4'b1101, // or(iter):
+                               //    for every (x, y) pair in the
+                               //    fma_write_buffer value that we catch in
+                               //    the memory module, set the corresponding
+                               //    mandelbrot_iters local logic in memory to
+                               //    iter if mandelbrot_iters[i] == 15 and |x| >
+                               //    = 2 or |y| >= 2. mandelbrot_iters[i] is
+                               //    whether i^th FMA's pixel has diverged.
+                               //    Note that iter is a reg_a, and we use
+                               //    the value in that register divided by 8.
+                               //    We divide by 8 to squeeze more iterations
+                               //    into 4 bits.
+        OP_SENDITERS = 4'b1110 // senditers(a_reg):
+                               //    Write mandelbrot_iters to the address at
+                               //    the value of a_reg in the
+                               //    frame buffer, ready to be colored in!
+                               //    Note that mandelbrot_iter has width
+                               //    FMA_COUNT * 4 bits, i.e., FMA_COUNT
+                               //    concurrent pixels, and stores the (number of iteration / 8) before
+                               //    the value of the pixel diverges. The default 
+                               //    value is 15, i.e. no divergence. Due to space 
+                               //    constraints, mandelbrot_iters is 4 bits per FMA.
     } isa;
-
-    // accumulate FMA_COUNT * 3 = 6 words per line and read / write stuff into the BRAM in lines of 6 words each
 
     // 3 registers, 4 bits each
     logic [3*4-1:0] reg_vals;
@@ -188,7 +218,7 @@ module memory #(
                         // However, set mandelbrot_iters only once per FMA, since we are
                         // interested in the first time a point diverges.
                         // Assume write_buffer_read_in_buffer holds (y_0, x_{i+1}, y_{i+1}).
-                        for (fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
+                        for (int fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
                             if (mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] == 4'b1111) begin
                                 // x_i = `WRITE_BUFFER_OUTPUT(fma_id, 4'b0001)
                                 // y_i = `WRITE_BUFFER_OUTPUT(fma_id, 4'b0010)
@@ -210,29 +240,29 @@ module memory #(
         end
     end
 
-    xilinx_true_dual_port_read_first_2_clock_ram #(
-        .RAM_WIDTH(LINE_WIDTH),                       // Specify RAM data width
-        .RAM_DEPTH(36000 / LINE_WIDTH),                     // Specify RAM depth (number of entries)
-        .RAM_PERFORMANCE("HIGH_PERFORMANCE"), // Select "HIGH_PERFORMANCE" or "LOW_LATENCY"
-        .INIT_FILE("")                        // Specify name/location of RAM initialization file if using one (leave blank if not)
-    ) memory_BRAM (
-        .addra(addr),   // Port A address bus, width determined from RAM_DEPTH
-        .dina(bram_in),     // Port A RAM input data, width determined from RAM_WIDTH
-        .clka(clk_in),     // Port A clock
-        .wea(bram_read),       // Port A write enable
-        .ena(1'b1),       // Port A RAM Enable, for additional power savings, disable port when not in use
-        .rsta(1'b0),     // Port A output reset (does not affect memory contents)
-        .regcea(bram_write), // Port A output register enable
-        .douta(abc_out),   // Port A RAM output data, width determined from RAM_WIDTH
-        .addrb(),   // Port B address bus, width determined from RAM_DEPTH
-        .dinb(),     // Port B RAM input data, width determined from RAM_WIDTH
-        .clkb(),     // Port B clock
-        .web(),       // Port B write enable
-        .enb(),       // Port B RAM Enable, for additional power savings, disable port when not in use
-        .rstb(),     // Port B output reset (does not affect memory contents)
-        .regceb(), // Port B output register enable
-        .doutb()    // Port B RAM output data, width determined from RAM_WIDTH
-    );
+    //xilinx_true_dual_port_read_first_2_clock_ram #(
+    //    .RAM_WIDTH(LINE_WIDTH),                       // Specify RAM data width
+    //    .RAM_DEPTH(36000 / LINE_WIDTH),                     // Specify RAM depth (number of entries)
+    //    .RAM_PERFORMANCE("HIGH_PERFORMANCE"), // Select "HIGH_PERFORMANCE" or "LOW_LATENCY"
+    //    .INIT_FILE("")                        // Specify name/location of RAM initialization file if using one (leave blank if not)
+    //) memory_BRAM (
+    //    .addra(addr),   // Port A address bus, width determined from RAM_DEPTH
+    //    .dina(bram_in),     // Port A RAM input data, width determined from RAM_WIDTH
+    //    .clka(clk_in),     // Port A clock
+    //    .wea(bram_read),       // Port A write enable
+    //    .ena(1'b1),       // Port A RAM Enable, for additional power savings, disable port when not in use
+    //    .rsta(1'b0),     // Port A output reset (does not affect memory contents)
+    //    .regcea(bram_write), // Port A output register enable
+    //    .douta(abc_out),   // Port A RAM output data, width determined from RAM_WIDTH
+    //    .addrb(),   // Port B address bus, width determined from RAM_DEPTH
+    //    .dinb(),     // Port B RAM input data, width determined from RAM_WIDTH
+    //    .clkb(),     // Port B clock
+    //    .web(),       // Port B write enable
+    //    .enb(),       // Port B RAM Enable, for additional power savings, disable port when not in use
+    //    .rstb(),     // Port B output reset (does not affect memory contents)
+    //    .regceb(), // Port B output register enable
+    //    .doutb()    // Port B RAM output data, width determined from RAM_WIDTH
+    //);
 endmodule
 
 `default_nettype wire
