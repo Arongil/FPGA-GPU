@@ -107,7 +107,7 @@ module memory #(
                     bram_write <= 0;
                 end
                 abc_valid_out <= bram_write_ready == 2'b10;
-            end else begin
+            end else if (instr_in[0:3] != OP_WRITE) begin
                 abc_valid_out <= 0;
             end
 
@@ -165,6 +165,12 @@ module memory #(
                         fma_output_can_be_valid_out <= (instr_in[24:27] == 4'b0001);
                         addr <= instr_in[8:23];
                         bram_write <= 1'b1;
+                    end
+                    OP_WRITE: begin
+                        use_new_c_out <= (instr_in[4:7] == 4'b0001);
+                        fma_output_can_be_valid_out <= (instr_in[24:27] == 4'b0001);
+                        abc_out <= bram_temp_in;
+                        abc_valid_out <= 1'b1;
                     end
                 endcase
             end
