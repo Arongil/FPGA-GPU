@@ -19,6 +19,9 @@ module controller #(
     input wire clk_in,
     input wire rst_in,
     output logic [0:INSTRUCTION_WIDTH-1] instr_out, // instruction to send to memory
+    output logic [PRIVATE_REG_WIDTH-1:0] reg_a_out, // any controller private register values that might be necessary for other modules to execute instr_out
+    output logic [PRIVATE_REG_WIDTH-1:0] reg_b_out,
+    output logic [PRIVATE_REG_WIDTH-1:0] reg_c_out,
     output logic instr_valid_for_memory_out
 );
     
@@ -104,13 +107,12 @@ module controller #(
                                //    Write mandelbrot_iters to the address at
                                //    the value of a_reg in the
                                //    frame buffer, ready to be colored in!
-                               //   Note that mandelbrot_iter has width FMA_COUNT 
-                               //   i.e. FMA_COUNT concurrent pixels
-                               //   Note that mandelbrot_iters has width FMA_COUNT
-                               //   and stores the (number of iteration / 8) before
-                               //   the value of the pixel diverges. The default 
-                               //   value is 15, i.e. no divergence. Due to space 
-                               //   constraints, mandelbrot_iters is 16 bits per FMA.
+                               //    Note that mandelbrot_iter has width
+                               //    FMA_COUNT * 4 bits, i.e., FMA_COUNT
+                               //    concurrent pixels, and stores the (number of iteration / 8) before
+                               //    the value of the pixel diverges. The default 
+                               //    value is 15, i.e. no divergence. Due to space 
+                               //    constraints, mandelbrot_iters is 4 bits per FMA.
     } isa;
 
     enum {

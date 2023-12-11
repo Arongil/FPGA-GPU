@@ -43,7 +43,7 @@ module top_level_tb;
     logic memory_abc_valid_out;
 
     // logics for controller
-
+    logic [WORD_WIDTH-1:0] controller_reg_a, controller_reg_b, controller_reg_c;
 
     // Instantiate 2 FMA blocks!
     fma #(
@@ -98,6 +98,9 @@ module top_level_tb;
     ) main_memory (
         .clk_in(clk_in),
         .rst_in(rst_in),
+        .controller_reg_a(controller_reg_a),
+        .controller_reg_b(controller_reg_b),
+        .controller_reg_c(controller_reg_c),
         .write_buffer_read_in(write_buffer_line_out),
         .write_buffer_valid_in(write_buffer_line_valid),
         .instr_in(memory_instr_in),
@@ -122,6 +125,9 @@ module top_level_tb;
         .clk_in(clk_in),
         .rst_in(rst_in),
         .instr_out(memory_instr_in),
+        .reg_a_out(controller_reg_a),
+        .reg_b_out(controller_reg_b),
+        .reg_c_out(controller_reg_c),
         .instr_valid_for_memory_out(memory_instr_valid_in)
     );
 
