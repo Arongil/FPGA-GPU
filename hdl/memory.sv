@@ -144,10 +144,10 @@ module memory #(
                         //    diff is at imm, which is instr_in[8:23] 
                         //    bram_temp_in[(i * FMA_COUNT + 16 * (j + 1) - 1) : (i * FMA_COUNT + 16 * j)]
                         //    (instr_in[24:27] == 0) ? (controller_reg_a) : ((instr_in[24:27] == 1) ? (controller_reg_b) : (controller_reg_c));
-                        //    (j[31:28] == instr_in[4:7]) ? (controller_reg[instr_in[27:24]] + i * instr_in[8:23] ) : (abc_valid_out[i * FMA_COUNT + j])
+                        //    (j == instr_in[4:7]) ? (controller_reg[instr_in[27:24]] + i * instr_in[8:23] ) : (abc_valid_out[i * FMA_COUNT + j])
                         for (int i = 0; i < FMA_COUNT; i = i + 1) begin
                             for (int j = 0; j < 3; j = j + 1) begin
-                                bram_temp_in[15 : 0] <= (j[31:28] == instr_in[4:7]) ? ((instr_in[24:27] == 0) ? (controller_reg_a) : ((instr_in[24:27] == 1) ? (controller_reg_b) : (controller_reg_c)) + i * instr_in[8:23]) : (bram_temp_in[i * FMA_COUNT + j]);
+                                bram_temp_in[15 : 0] <= (j == instr_in[4:7]) ? ((instr_in[24:27] == 0) ? (controller_reg_a) : ((instr_in[24:27] == 1) ? (controller_reg_b) : (controller_reg_c)) + i * instr_in[8:23]) : (bram_temp_in[i * FMA_COUNT + j]);
                             end
                         end
                     end

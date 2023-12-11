@@ -100,7 +100,7 @@ module controller #(
                                //    the value in that register divided by 8.
                                //    We divide by 8 to squeeze more iterations
                                //    into 4 bits.
-        OP_SENDITERS = 4'b1110,// senditers(a_reg):
+        OP_SENDITERS = 4'b1110 // senditers(a_reg):
                                //    Write mandelbrot_iters to the address at
                                //    the value of a_reg in the
                                //    frame buffer, ready to be colored in!

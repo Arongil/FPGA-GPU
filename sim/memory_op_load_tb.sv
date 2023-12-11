@@ -97,8 +97,10 @@ module memory_op_load_tb;
     #10;
 
     instr_in = 32'b1101___0000___0000_0000_0000_0001___0000___0000; // a, reg 1, diff = 1, 
+    #10;
     // where FMA_i's value is set to reg_val + i * diff.
-    // bram_temp_in should be 1 + 0 * 1, 0, 0, 1 + 1 * 1, 0, 0,
+    // bram_temp_in should be 1 + 0 * 1, 0, 0, 1 + 1 * 1, 0, 0
+    // 16'b1, 16'b0, 16'b0, 16'b10, 16'b0, 16'b0
 
     instr_valid_in = 0;
     #100;
