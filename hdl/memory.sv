@@ -235,6 +235,9 @@ module memory #(
                         // Reset mandelbrot_iters to all ones
                         mandelbrot_iters <= -1;
                     end
+                    default: begin
+                        // If the instruction is not recognized, no op.
+                    end
                 endcase
             end
         end

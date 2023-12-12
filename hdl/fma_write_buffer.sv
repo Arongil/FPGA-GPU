@@ -44,10 +44,6 @@ module fma_write_buffer #(
                     for (int fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
                         // Assume every FMA is valid because at least one is.
                         `WRITE_BUFFER_OUTPUT(fma_id, phrase_in) <= fma_out[fma_id * WORD_WIDTH +: WORD_WIDTH];
-                        //for (int j = 0; j < WORD_WIDTH; j = j + 1) begin
-
-                        //    line_out[phrase_in * FMA_COUNT * WORD_WIDTH + i * WORD_WIDTH + j] <= fma_out[i * WORD_WIDTH + j];
-                        //end
                     end
                 end
             end else begin
