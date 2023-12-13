@@ -31,14 +31,14 @@ def bge(a_reg, b_reg):
 def jump(jump_to_val):
     return (0b0101 << 28) + (jump_to_val << 8)
 
-def sma(val):
-    return (0b0110 << 28) + (val << 8)
+def fbswap():
+    return (0b0110 << 28)
 
 def loadi(a_reg, val):
     return (0b0111 << 28) + (a_reg << 24) + (val << 8)
 
-def sendl():
-    return (0b1000 << 28)
+def sendl(val):
+    return (0b1000 << 28) + (val << 8)
 
 def loadb(shuffle1, shuffle2, shuffle3):
     return (0b1001 << 28) + (shuffle1 << 24) + (shuffle2 << 4) + (shuffle3 << 0)
@@ -58,6 +58,9 @@ def op_or(iters):
 def senditers(a_reg):
     return (0b1110 << 28) + (a_reg << 24)
 
+def pause():
+    return (0b1111 << 28)
+
 str_to_command = {
     "nop": nop,
     "end": end,
@@ -65,7 +68,7 @@ str_to_command = {
     "addi": addi,
     "bge": bge,
     "jump": jump,
-    "sma": sma,
+    "fbswap": fbswap,
     "loadi": loadi,
     "sendl": sendl,
     "loadb": loadb,
@@ -74,6 +77,7 @@ str_to_command = {
     "write": write,
     "or": op_or,
     "senditers": senditers,
+    "pause": pause,
 }
 
 ##########################################################

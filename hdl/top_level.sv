@@ -23,13 +23,17 @@ module top_level(
   output logic pmodblock
 );
 
-    assign led = sw; // set green LEDs to flip on with switches
+    assign led[7:0] = sw[7:0]; // set green LEDs to flip on with switches
     assign rgb1 = 0; // turn off rgb LEDs (active high)
     assign rgb0 = 0; // turn off rgb LEDs (active high)
 
     // Set system reset to button 0
     logic sys_rst;
     assign sys_rst = btn[0];
+
+    // Set system "continue" to button 1 (to start again after controller pauses)
+    logic sys_continue;
+    assign sys_continue = btn[1];
 
     // START HDMI SETUP
 
@@ -68,11 +72,8 @@ module top_level(
         .fc_out(frame_count)
     );
 
-    logic [7:0] img_red, img_green, img_blue;
+    // These colors will be set by the frame buffer.
     logic [7:0] red, green, blue;
-    assign red = img_red;
-    assign green = img_green;
-    assign blue = img_blue;
 
     // TMDS signals
     logic [9:0] tmds_10b [0:2]; // output of each TMDS encoder
@@ -149,7 +150,7 @@ module top_level(
     localparam PRIVATE_REG_WIDTH=16;
     localparam PRIVATE_REG_COUNT=16;
     localparam INSTRUCTION_WIDTH=32;
-    localparam INSTRUCTION_COUNT=61;    // UPDATE TO MATCH PROGRAM_FILE!
+    localparam INSTRUCTION_COUNT=62;    // UPDATE TO MATCH PROGRAM_FILE!
     localparam DATA_CACHE_WIDTH=16;
     localparam DATA_CACHE_DEPTH=4096;
 
@@ -158,7 +159,11 @@ module top_level(
     localparam LINE_WIDTH=96;
     localparam FMA_COUNT=2;
 
-    localparam ADDR_LENGTH=$clog2(36000 / 96);
+    localparam ADDR_LENGTH=$clog2(36000 / LINE_WIDTH);
+
+    localparam WIDTH=320;
+    localparam HEIGHT=160;
+    localparam ITERS_BITS=4;
 
     // logics for FMAs
     logic [3*WORD_WIDTH-1:0] fma_abc_1, fma_abc_2;
@@ -180,6 +185,14 @@ module top_level(
     logic memory_use_new_c_out;
     logic memory_fma_output_can_be_valid_out;
     logic memory_abc_valid_out;
+    logic frame_buffer_swap_out;
+    logic mandelbrot_iters_valid_out;
+    logic [ITERS_BITS*FMA_COUNT-1:0] mandelbrot_iters_out;
+    logic [$clog2(WIDTH*HEIGHT)-1:0] mandelbrot_addr_out;
+
+    //// TEMP TEMP TEMP
+    assign led[15:8] = mandelbrot_iters_out; // show mandelbrot_iters on the LEDs
+    //// TEMP TEMP TEMP
 
     // logics for controller
     logic [WORD_WIDTH-1:0] controller_reg_a, controller_reg_b, controller_reg_c;
@@ -189,7 +202,7 @@ module top_level(
         .WIDTH(WORD_WIDTH),
         .FIXED_POINT(FIXED_POINT)
     ) fma1 (
-        .clk_in(clk_100mhz),
+        .clk_in(clk_pixel),
         .rst_in(sys_rst),
         .abc(memory_abc_out[LINE_WIDTH - 1:LINE_WIDTH/2]),
         .valid_in(memory_abc_valid_out),
@@ -203,7 +216,7 @@ module top_level(
         .WIDTH(WORD_WIDTH),
         .FIXED_POINT(FIXED_POINT)
     ) fma2 (
-        .clk_in(clk_100mhz),
+        .clk_in(clk_pixel),
         .rst_in(sys_rst),
         .abc(memory_abc_out[LINE_WIDTH/2 - 1:0]),
         .valid_in(memory_abc_valid_out),
@@ -219,7 +232,7 @@ module top_level(
         .WORD_WIDTH(WORD_WIDTH),
         .LINE_WIDTH(LINE_WIDTH)
     ) write_buffer (
-        .clk_in(clk_100mhz),
+        .clk_in(clk_pixel),
         .rst_in(sys_rst),
         .fma_out(write_buffer_fma_out),
         .fma_valid_out(write_buffer_fma_valid_out),
@@ -233,9 +246,10 @@ module top_level(
         .WORD_WIDTH(WORD_WIDTH),
         .LINE_WIDTH(LINE_WIDTH),
         .ADDR_LENGTH(ADDR_LENGTH),
-        .INSTRUCTION_WIDTH(INSTRUCTION_WIDTH)
+        .INSTRUCTION_WIDTH(INSTRUCTION_WIDTH),
+        .ITERS_BITS(ITERS_BITS)
     ) main_memory (
-        .clk_in(clk_100mhz),
+        .clk_in(clk_pixel),
         .rst_in(sys_rst),
         .controller_reg_a(controller_reg_a),
         .controller_reg_b(controller_reg_b),
@@ -247,7 +261,11 @@ module top_level(
         .abc_out(memory_abc_out),
         .abc_valid_out(memory_abc_valid_out),
         .use_new_c_out(memory_use_new_c_out),
-        .fma_output_can_be_valid_out(memory_fma_output_can_be_valid_out)
+        .fma_output_can_be_valid_out(memory_fma_output_can_be_valid_out),
+        .frame_buffer_swap_out(frame_buffer_swap_out),
+        .mandelbrot_iters_valid_out(mandelbrot_iters_valid_out),
+        .mandelbrot_iters_out(mandelbrot_iters_out),
+        .mandelbrot_addr_out(mandelbrot_addr_out)
     );
 
     // Instantiate controller!
@@ -260,8 +278,9 @@ module top_level(
         .DATA_CACHE_WIDTH(DATA_CACHE_WIDTH),
         .DATA_CACHE_DEPTH(DATA_CACHE_DEPTH)
     ) controller_module (
-        .clk_in(clk_100mhz),
+        .clk_in(clk_pixel),
         .rst_in(sys_rst),
+        .continue_in(sys_continue),
         .instr_out(memory_instr_in),
         .reg_a_out(controller_reg_a),
         .reg_b_out(controller_reg_b),
@@ -276,6 +295,31 @@ module top_level(
     end
 
     // END GPU SETUP
+    
+    // START FRAME BUFFER SETUP
+
+    // Instantiate frame buffer!
+    frame_buffer #(
+        .FMA_COUNT(FMA_COUNT),
+        .ITERS_BITS(ITERS_BITS),
+        .WIDTH(WIDTH),
+        .HEIGHT(HEIGHT)
+    ) fb (
+        .sys_clk_in(clk_pixel),
+        .hdmi_clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .mandelbrot_iters_valid_in(mandelbrot_iters_valid_out),
+        .mandelbrot_iters_in(mandelbrot_iters_out),
+        .addr_write_in(mandelbrot_addr_out),
+        .x_draw_in(hcount),
+        .y_draw_in(vcount),
+        .swap_in(frame_buffer_swap_out),
+        .red_out(red),
+        .green_out(green),
+        .blue_out(blue)
+    );
+
+    // END FRAME BUFFER SETUP
 
 endmodule // top_level
 

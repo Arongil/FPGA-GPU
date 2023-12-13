@@ -17,7 +17,7 @@ module top_level_tb;
 
     localparam ADDR_LENGTH=$clog2(36000 / 96);
 
-    localparam CYCLES_TO_RUN = 750;//2*INSTRUCTION_COUNT + 8;
+    localparam CYCLES_TO_RUN = 1950;//2*INSTRUCTION_COUNT + 8;
 
     // make logics for inputs and outputs!
     logic clk_in;

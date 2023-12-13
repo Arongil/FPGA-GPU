@@ -13,7 +13,10 @@ module memory #(
     parameter FIXED_POINT = 10, // number of bits after the decimal
     parameter LINE_WIDTH = 96,  // width of a line, FMA_COUNT * 3 * WORD_WIDTH = 2 * 3 * 16 = 96
     parameter ADDR_LENGTH = $clog2(36000 / 96),  // 96 bits in a line. 36kb/96 = 375
-    parameter INSTRUCTION_WIDTH = 32      // number of bits per instruction
+    parameter INSTRUCTION_WIDTH = 32,      // number of bits per instruction
+    parameter WIDTH = 320,
+    parameter HEIGHT = 160,
+    parameter ITERS_BITS = 4
 ) (
     // Use first 4-bit reg for loading immediate. 4'b0 means loading 0th word in the line, 4'b1 means 1st, ... , 4'b101 means 5th 
     // We have FMA_COUNT * 3 = 6 words per line right now
@@ -32,7 +35,11 @@ module memory #(
     output logic [LINE_WIDTH - 1 : 0] abc_out,  // for each FMA i, abc_in[i] is laid out as "a b c" 
     output logic use_new_c_out,
     output logic fma_output_can_be_valid_out,
-    output logic abc_valid_out
+    output logic abc_valid_out,
+    output logic frame_buffer_swap_out,
+    output logic mandelbrot_iters_valid_out,
+    output logic [ITERS_BITS*FMA_COUNT-1:0] mandelbrot_iters_out,
+    output logic [$clog2(WIDTH*HEIGHT)-1:0] mandelbrot_addr_out
 );
     // OP_CODEs: read in from FMA_write_buffer 4'b1001
     // OP_CODEs: write to FMAs 4'b1010
@@ -51,8 +58,8 @@ module memory #(
                                //    Sets compare_reg to 1 iff a_reg >= b_reg
         OP_JUMP    = 4'b0101,  // jump(jump_to):
                                //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
-        OP_SMA     = 4'b0110,  // sma(val):
-                               //    Set memory address to the immediate val in the data cache. (FUTURE IMPROVEMENT: DELETE SMA AND MERGE WITH SENDL)
+        OP_FBSWAP  = 4'b0110,  // fbswap():
+                               //    Tell the dual frame buffer to switch which buffer the GPU is writing to.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
         OP_SENDL   = 4'b1000,  // sendl(addr):
@@ -109,8 +116,8 @@ module memory #(
     logic [3*4-1:0] reg_vals;
     assign reg_vals = {instr_in[4:7], instr_in[24:27], instr_in[28:31]};
 
-    // mandelbrot_iters holds 4 bits per FMA (0-15)
-    logic [4*FMA_COUNT-1:0] mandelbrot_iters;
+    // mandelbrot_iters holds ITERS_BITS bits per FMA (0-15 by default, with 4 bits)
+    logic [ITERS_BITS*FMA_COUNT-1:0] mandelbrot_iters;
 
     logic [ADDR_LENGTH - 1 : 0] addr;
     logic [LINE_WIDTH - 1 : 0] bram_temp_in; // accumulating stuff to put into BRAM
@@ -138,19 +145,22 @@ module memory #(
                 write_buffer_read_in_buffer <= write_buffer_read_in;
             end
 
-            if (bram_write) begin
-                if (bram_write_ready == 0) begin
-                    bram_write_ready <= 1;
-                end else if (bram_write_ready <= 1) begin
-                    bram_write_ready <= 2;
-                end else begin
-                    bram_write_ready <= 0;
-                    bram_write <= 0;
-                end
-                abc_valid_out <= bram_write_ready == 2'b10;
-            end else if (instr_in[0:3] != OP_WRITE) begin
-                abc_valid_out <= 0;
-            end
+            mandelbrot_iters_valid_out <= instr_valid_in && instr_in[0:3] == OP_SENDITERS;
+            frame_buffer_swap_out <= instr_valid_in && instr_in[0:3] == OP_FBSWAP;
+
+            //if (bram_write) begin
+            //    if (bram_write_ready == 0) begin
+            //        bram_write_ready <= 1;
+            //    end else if (bram_write_ready <= 1) begin
+            //        bram_write_ready <= 2;
+            //    end else begin
+            //        bram_write_ready <= 0;
+            //        bram_write <= 0;
+            //    end
+            //    abc_valid_out <= bram_write_ready == 2'b10;
+            //end else if (!instr_valid_in) begin
+            //    abc_valid_out <= 0;
+            //end
 
             if (instr_valid_in) begin
                 bram_read <= (instr_in[0:3] == OP_SENDL);
@@ -158,8 +168,7 @@ module memory #(
                 case (instr_in[0:3])
                     OP_NOP: begin
                     end
-                    OP_SMA: begin
-                        addr <= instr_in[8:23];
+                    OP_FBSWAP: begin
                     end
                     OP_LOADI: begin
                         // What "+:" means:
@@ -167,6 +176,7 @@ module memory #(
                         bram_temp_in[LINE_WIDTH - (instr_in[4:7]+1) * WORD_WIDTH +: WORD_WIDTH] <= instr_in[8:23];
                     end
                     OP_SENDL: begin
+                        addr <= instr_in[8:23];
                         bram_in[LINE_WIDTH - 1 : 0] <= bram_temp_in[LINE_WIDTH - 1 : 0];
                     end
                     OP_LOADB: begin
@@ -212,7 +222,7 @@ module memory #(
                         use_new_c_out <= (instr_in[4:7] == 4'b0001);
                         fma_output_can_be_valid_out <= (instr_in[24:27] == 4'b0001);
                         abc_out <= bram_temp_in;
-                        abc_valid_out <= !abc_valid_out; // temp: set to 1 then to 0
+                        abc_valid_out <= 1'b1; // temp: set to 1 then to 0
                             // Once controller prefetches to run one instruction per cycle, we won't need this workaround
                     end
                     OP_OR: begin
@@ -222,15 +232,22 @@ module memory #(
                         // interested in the first time a point diverges.
                         // Assume write_buffer_read_in_buffer holds (x_{i+1}, y_{i+1}, |z_i|**2).
                         for (int fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
-                            if (mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] == 4'b1111) begin
+                            // Write to mandelbrot_iters only if it has never been written to before (i.e., it equals max iters)
+                            if (mandelbrot_iters[ITERS_BITS*FMA_COUNT - (fma_id+1)*ITERS_BITS +: ITERS_BITS] == (1<<ITERS_BITS)-1) begin
+                                // Write to mandelbrot_iters if the point has diverged (squared magnitude greater than 4)
                                 if (`WRITE_BUFFER_OUTPUT_WITHOUT_LAST_BIT(fma_id, 4'b0010) >= (4 << FIXED_POINT)) begin
-                                    mandelbrot_iters[4*FMA_COUNT - (fma_id+1)*4 +: 4] <= controller_reg_a[7:4]; // same as iters >> 4
+                                    // Store iters >> 3 (so that 0-127 fits in 0-15)
+                                    mandelbrot_iters[ITERS_BITS*FMA_COUNT - (fma_id+1)*ITERS_BITS +: ITERS_BITS] <= controller_reg_a[7-1:7-ITERS_BITS];//controller_reg_a[3:0]; // same as iters >> 4
                                 end
                             end
                         end
                     end
                     OP_SENDITERS: begin
-                        // Send mandelbrot_iters to dual frame buffer
+                        // Output mandelbrot_iters for dual frame buffer
+                        mandelbrot_iters_out <= mandelbrot_iters;
+
+                        // Output address for frame buffer to write to
+                        mandelbrot_addr_out <= controller_reg_a;
                         
                         // Reset mandelbrot_iters to all ones
                         mandelbrot_iters <= -1;

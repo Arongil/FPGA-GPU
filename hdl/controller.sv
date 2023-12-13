@@ -18,6 +18,7 @@ module controller #(
 ) (
     input wire clk_in,
     input wire rst_in,
+    input wire continue_in, // don't reset, but go to LOAD_INSTRUCTION state
     output logic [0:INSTRUCTION_WIDTH-1] instr_out, // instruction to send to memory
     output logic [PRIVATE_REG_WIDTH-1:0] reg_a_out, // any controller private register values that might be necessary for other modules to execute instr_out
     output logic [PRIVATE_REG_WIDTH-1:0] reg_b_out,
@@ -61,12 +62,12 @@ module controller #(
                                //    Sets compare_reg to 1 iff a_reg >= b_reg
         OP_JUMP    = 4'b0101,  // jump(jump_to):
                                //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
-        OP_SMA     = 4'b0110,  // sma(val):
-                               //    Set memory address to the immediate val in the data cache. (FUTURE IMPROVEMENT: DELETE SMA AND MERGE WITH SENDL)
+        OP_FBSWAP  = 4'b0110,  // fbswap():
+                               //    Tell the dual frame buffer to switch which buffer the GPU is writing to.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_SENDL   = 4'b1000,  // sendl(addr):
-                               //    Send line into the BRAM at memory address addr.
+        OP_SENDL   = 4'b1000,  // sendl(addr, val):
+                               //    Send line into the BRAM at memory address val.
         OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
                                //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
@@ -103,7 +104,7 @@ module controller #(
                                //    the value in that register divided by 8.
                                //    We divide by 8 to squeeze more iterations
                                //    into 4 bits.
-        OP_SENDITERS = 4'b1110 // senditers(a_reg):
+        OP_SENDITERS = 4'b1110,// senditers(a_reg):
                                //    Write mandelbrot_iters to the address at
                                //    the value of a_reg in the
                                //    frame buffer, ready to be colored in!
@@ -113,6 +114,8 @@ module controller #(
                                //    the value of the pixel diverges. The default 
                                //    value is 15, i.e. no divergence. Due to space 
                                //    constraints, mandelbrot_iters is 4 bits per FMA.
+        OP_PAUSE = 4'b1111     // pause():
+                               //   Controller pauses execution until it receives a signal to continue.
     } isa;
 
     enum {
@@ -205,6 +208,9 @@ module controller #(
         end else begin
             case (state)
                 IDLE: begin
+                    if (continue_in) begin
+                        state <= LOAD_INSTRUCTION;
+                    end
                 end
 
                 LOAD_INSTRUCTION: begin
@@ -256,6 +262,10 @@ module controller #(
                             end
                         end
 
+                        OP_PAUSE: begin
+                            state <= IDLE;
+                        end
+
                         default: begin
                             // Unrecognized instruction is NOP
                         end
@@ -272,16 +282,16 @@ module controller #(
                         state <= LOAD_INSTRUCTION; // TEMP -- remove when using prefetching and instead directly go to next instruction
                         //end
                     end
-
                 end
 
                 default: begin
                 end
             endcase
             // Tell other modules when their instructions are valid.
-            // 1. Memory (op code is NOP, SMA, LOADI, SENDL, LOADB, or WRITEB)
             // 2. HDMI (to be implemented)
-            instr_valid_for_memory_out <= state == EXECUTE_INSTRUCTION; //(
+
+            // Instruction will be valid for memory if we are about to execute an instruction, meaning we are currently on LOAD_INSTRUCTION.
+            instr_valid_for_memory_out <= state == LOAD_INSTRUCTION; //(
                 //instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
                 //instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
                 //instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB ||

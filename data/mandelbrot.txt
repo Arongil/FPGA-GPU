@@ -28,11 +28,11 @@
 # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
 # DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
 xor 0 0               # zero out register 0
-addi 2 0 8#160          # HEIGHT = 160: set register 2 to 160
-addi 3 0 2#320          # WIDTH = 320: set register 3 to 320
-addi 4 0 -2f          # X_MIN = -2 (f notation compiles into fixed-point)
-addi 5 0 2 #127          # MAX_ITERS = 127 (register 5)
-addi 6 0 -1.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
+addi 2 0 160#8          # HEIGHT = 160: set register 2 to 160
+addi 3 0 320#2          # WIDTH = 320: set register 3 to 320
+addi 4 0 -2f#-1f          # X_MIN = -2 (f notation compiles into fixed-point)
+addi 5 0 127              # MAX_ITERS = 127 (register 5)
+addi 6 0 -1.25f#0.29f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
 
 # FREE REGISTERS: reg 7, reg 12
 
@@ -137,9 +137,9 @@ write 0 1      # send loaded buffer to FMAs! (not replace_c, fma_valid_out)
 nop            # stall for results to flush out from write buffer
 
 # NOW: the write buffer will send THREE values for each FMA:
-#   1. y_0
-#   2. x_{i+1}
-#   3. y_{i+1}
+#   1. x_{i+1}
+#   2. y_{i+1}
+#   3. x_i*x_i + y_i*y_i
 
 or 15    # record whether points have diverged by iteration iter (reg 15)
 
@@ -150,6 +150,8 @@ bge 0 0       # prepare to jump (compare 0 >= 0)
 jump (((6)))  # jump to (6) [JUMP MARKER 5]
 
 # SEND THE MANDELBROT_ITERS ARRAY TO FRAME BUFFER AT THE PROPER ADDRESS
+
+#pause  # wait for user to continue execution
 
 # do a register computation to create a register that is col-major order for the frame buffer, then write to that register (14)
 # addr = x_count * WIDTH + y_count
@@ -174,6 +176,7 @@ jump (((0)))           # jump to (0) [JUMP MARKER 1]
 
 # </FOR LOOP X>
 
+fbswap  # tell the frame buffer to begin reading in the iters we just computed!
 
 
 
