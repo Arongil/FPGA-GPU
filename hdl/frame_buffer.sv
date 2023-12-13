@@ -7,7 +7,7 @@ module frame_buffer #(
     parameter FMA_COUNT=2,
     parameter ITERS_BITS=4, // how many bits we store for iterations until divergence in Mandelbrot calculations
     parameter WIDTH=320,
-    parameter HEIGHT=160
+    parameter HEIGHT=320
 ) (
     input wire sys_clk_in,
     input wire hdmi_clk_in,
@@ -20,7 +20,8 @@ module frame_buffer #(
     input wire swap_in, // high for one cycle if we should swap whether GPU writes to BRAM A or B
     output logic [7:0] red_out,
     output logic [7:0] green_out,
-    output logic [7:0] blue_out
+    output logic [7:0] blue_out,
+    output logic GPU_writing_to_BRAM_A_out // TEMP TEMP TEMP
 );
 
     // There are two BRAMS, A and B. At first, the GPU writes to BRAM A
@@ -28,6 +29,7 @@ module frame_buffer #(
     // Technically there is one shared BRAM, so we translate
     // by WIDTH*HEIGHT to refer to the second BRAM.
     logic GPU_writing_to_BRAM_A; // high if GPU is writing to BRAM A
+    assign GPU_writing_to_BRAM_A_out = GPU_writing_to_BRAM_A;
     always_ff @(posedge sys_clk_in) begin
         if (rst_in) begin
             GPU_writing_to_BRAM_A <= 1;
@@ -54,14 +56,27 @@ module frame_buffer #(
     // Set output data to come from the BRAM to which the GPU is not writing.
     logic [ITERS_BITS-1:0] out_a;
     logic [ITERS_BITS-1:0] out_b;
-    logic [ITERS_BITS-1:0] pixel_out;
-    assign pixel_out = !GPU_writing_to_BRAM_A ? out_a : out_b;
+    logic [ITERS_BITS-1:0] iters_out;
+    assign iters_out = !GPU_writing_to_BRAM_A ? out_a : out_b;
 
     // Set the output color as a gradient according to the iteration count (0-15).
-    // TEMP: currently just black (not diverged) or white (diverged).
-    assign red_out = (pixel_out < 4'b1111 && x_draw_in < WIDTH && y_draw_in < HEIGHT) ? 8'b0111_1111 : 8'b0;
-    assign green_out = (pixel_out < 4'b1111 && x_draw_in < WIDTH && y_draw_in < HEIGHT) ? 8'b0111_1111 : 8'b0;
-    assign blue_out = (pixel_out < 4'b1111 && x_draw_in < WIDTH && y_draw_in < HEIGHT) ? 8'b0111_1111 : 8'b0;
+    logic [16*8-1:0] red_gradient = {8'd66, 8'd25, 8'd9, 8'd4, 8'd0, 8'd12, 8'd24, 8'd57, 8'd134, 8'd211, 8'd241, 8'd248, 8'd255, 8'd204, 8'd153, 8'd0};
+    logic [16*8-1:0] green_gradient = {8'd30, 8'd7, 8'd1, 8'd4, 8'd7, 8'd44, 8'd82, 8'd125, 8'd181, 8'd236, 8'd233, 8'd201, 8'd170, 8'd128, 8'd87, 8'd0};
+    logic [16*8-1:0] blue_gradient = {8'd15, 8'd26, 8'd47, 8'd73, 8'd100, 8'd138, 8'd177, 8'd209, 8'd229, 8'd248, 8'd191, 8'd95, 8'd0, 8'd0, 8'd0, 8'd0};
+
+    always_comb begin
+        if (x_draw_in < WIDTH && y_draw_in < HEIGHT) begin
+            // Color in-bounds pixels on a gradient according to how long it took to diverge in the Mandelbrot set. If it never diverged, color it black!
+            red_out = red_gradient[16*8 - 8*(iters_out+1) +: 8];
+            green_out = green_gradient[16*8 - 8*(iters_out+1) +: 8];
+            blue_out = blue_gradient[16*8 - 8*(iters_out+1) +: 8];
+        end else begin
+            // Color out-of-bounds pixels black.
+            red_out = 8'b0;
+            green_out = 8'b0;
+            blue_out = 8'b0;
+        end
+    end
 
     // Write data from GPU into memory. Because the GPU sends data in batches of FMA_COUNT,
     // we enter a finite state machine to write the values one-by-one until we are done.
@@ -99,7 +114,7 @@ module frame_buffer #(
     // Increment the address that the GPU writes to after each iters that we write.
     logic [$clog2(2*WIDTH*HEIGHT)-1:0] addr_write_GPU, addr_read_HDMI;
     assign addr_write_GPU = addr_write_in + iters_index;
-    assign addr_read_HDMI = x_draw_in + y_draw_in * WIDTH;
+    assign addr_read_HDMI = x_draw_in * HEIGHT + y_draw_in; // col-major
     
     logic [$clog2(2*WIDTH*HEIGHT)-1:0] addr_a, addr_b;
     assign addr_a = GPU_writing_to_BRAM_A ? addr_write_GPU : addr_read_HDMI;

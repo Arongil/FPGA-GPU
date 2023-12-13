@@ -26,13 +26,13 @@
 # Step 1: Set up mesh of grid points to render
 
 # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
-# DY = 2^(-6) = 0.015625 so that Y_MAX = 1.25
+# DY = 2^(-7) = 0.0078125 so that Y_MAX = 1.25
 xor 0 0               # zero out register 0
-addi 2 0 160#8          # HEIGHT = 160: set register 2 to 160
-addi 3 0 320#2          # WIDTH = 320: set register 3 to 320
+addi 2 0 320#8          # HEIGHT = 160: set register 2 to 160
+addi 3 0 320#2          # WIDTH = 160: set register 3 to 320
 addi 4 0 -2f#-1f          # X_MIN = -2 (f notation compiles into fixed-point)
-addi 5 0 127              # MAX_ITERS = 127 (register 5)
-addi 6 0 -1.25f#0.29f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
+addi 5 0 63              # MAX_ITERS = 127 (register 5)
+addi 6 0 -1.25f#0f#0.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
 
 # FREE REGISTERS: reg 7, reg 12
 
@@ -42,6 +42,7 @@ addi 6 0 -1.25f#0.29f       # Y_MIN = -1.25 (f notation compiles into fixed-poin
 #   - Use register 10 as x_val
 #   - Use register 11 as y_val
 #   - Use register 14 as addr_for_iters
+#   - Use register 15 for iters
 #   - Increment x_val and y_val by DX and DY
 # We will implement the following pseudocode:
 #   for (x_counter = 0; x_counter < WIDTH; x_counter++) {
@@ -50,7 +51,7 @@ addi 6 0 -1.25f#0.29f       # Y_MIN = -1.25 (f notation compiles into fixed-poin
 #     }
 #   }
 
-xor 14 14              # zero out register 14 (addr_for_iters)
+xor 14 14              # zero out register 14 (addr_for_iters) [JUMP MARKER 7]
 
 # <FOR LOOP X>
 
@@ -83,17 +84,20 @@ load 0 0 0   # load 0 into FMA "a" values (diff 0 per FMA)
 load 1 0 0   # load 0 into FMA "b" values (diff 0 per FMA)
 load 2 10 0  # load x_val into FMA "c" values
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
+#pause
 # Next, output just y_val into both FMAs for later use.
-load 2 11 0.015625f  # load y_0 into FMA "c"      (diff DY per FMA)
+load 2 11 0.0078125f  # load y_0 into FMA "c"      (diff DY per FMA)
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
+#pause
 # Finally, let's output the squared magnitude of z_0 = x_0 + y_0.
 load 0 10 0  # load x_val into FMA "a" values
 load 1 10 0  # load x_val into FMA "b" values
 load 2 0 0   # load 0 into FMA "c" values
 write 1 0    # send loaded buffer to the FMAs! (replace_c, not fma_valid_out)
-load 0 11 0.015625f # load y_0 into FMA "a"       (diff DY per FMA)
-load 1 11 0.015625f # load y_0 into FMA "b"       (diff DY per FMA)
+load 0 11 0.0078125f # load y_0 into FMA "a"       (diff DY per FMA)
+load 1 11 0.0078125f # load y_0 into FMA "b"       (diff DY per FMA)
 write 0 1    # send loaded buffer to the FMAs! (not replace c, fma_valid_out)
+#pause
 nop          # stall for final value to write
 
 # NOW: the write buffer will send THREE values for each FMA:
@@ -104,7 +108,9 @@ nop          # stall for final value to write
 # Shuffle should also select (2x_i, -y_i).
 
 # Register 15 will hold the iter value
+#pause
 addi 15 0 0   # iters = 0
+#pause
 bge 15 5      # if iters >= 127 [JUMP MARKER 6]
 jump (((5)))  # jump to (5)
 
@@ -123,17 +129,24 @@ write 1 0      # send loaded buffer to FMAs! (replace_c, not fma_valid_out)
 # Let's compute x*x - y*y + y_0 (FULL x_{i+1})
 loadb -2 2 0   # set buffer to "-y_i y_i 0" (-2 2 0)
 write 0 1      # send loaded buffer to FMAs! (not replace_c, fma_valid_out)
+#pause
 
 # Let's compute 2*x*y + y_0 (FULL y_{i+1})
 loadb 4 2 0         # set buffer to "2*x_i y_i 0" (4 2 0)
-load 2 11 0.015625f # load y_0 into FMA "c"       (diff DY per FMA)
+load 2 11 0.0078125f # load y_0 into FMA "c"       (diff DY per FMA)
+#pause
 write 1 1           # send loaded buffer to FMAs! (replace_c, fma_valid_out)
+#pause
 
 # Let's compute x*x + y*y (magnitude of z_i)
 loadb 1 1 0    # set buffer to "x_i x_i 0" (1 1 0)
+#pause
 write 1 0      # send loaded buffer to FMAs! (replace_c, not fma_valid_out)
+#pause
 loadb 2 2 0    # set buffer to "y_i y_i 0" (2 2 0)
+#pause
 write 0 1      # send loaded buffer to FMAs! (not replace_c, fma_valid_out)
+#pause
 nop            # stall for results to flush out from write buffer
 
 # NOW: the write buffer will send THREE values for each FMA:
@@ -145,21 +158,20 @@ or 15    # record whether points have diverged by iteration iter (reg 15)
 
 # </mandelbrot for loop>
 
+#pause
 addi 15 15 1  # increment iters by 1
 bge 0 0       # prepare to jump (compare 0 >= 0)
 jump (((6)))  # jump to (6) [JUMP MARKER 5]
 
 # SEND THE MANDELBROT_ITERS ARRAY TO FRAME BUFFER AT THE PROPER ADDRESS
 
-#pause  # wait for user to continue execution
+senditers 8 9  # send iters to address at (x_val, y_val) of frame buffer
 
-# do a register computation to create a register that is col-major order for the frame buffer, then write to that register (14)
-# addr = x_count * WIDTH + y_count
-senditers 14  # send to line addr_to_send of frame buffer the mandelbrot_iters
+#pause
 
 # </FOR LOOP Y: INNER LOGIC>
 
-addi 11 11 0.03125f    # increment y_val by 2*DY (FMA_COUNT*DY)
+addi 11 11 0.015625f   # increment y_val by 2*DY (FMA_COUNT*DY)
 addi 14 14 2           # increment addr_for_iters by FMA_COUNT = 2
 addi 9 9 2             # increment y_counter by FMA_COUNT = 2
 bge 0 0                # prepare to jump (compare 0 >= 0)
@@ -178,18 +190,8 @@ jump (((0)))           # jump to (0) [JUMP MARKER 1]
 
 fbswap  # tell the frame buffer to begin reading in the iters we just computed!
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+# Increment the num_iters we calculate by 1, then loop back to the start
+#addi 5 5 1
+#jump (((7)))
 
 end

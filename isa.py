@@ -55,8 +55,8 @@ def write(replace_c, fma_valid):
 def op_or(iters):
     return (0b1101 << 28) + (iters << 24)
 
-def senditers(a_reg):
-    return (0b1110 << 28) + (a_reg << 24)
+def senditers(a_reg, b_reg):
+    return (0b1110 << 28) + (a_reg << 24) + (b_reg << 4)
 
 def pause():
     return (0b1111 << 28)

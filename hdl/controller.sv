@@ -23,7 +23,12 @@ module controller #(
     output logic [PRIVATE_REG_WIDTH-1:0] reg_a_out, // any controller private register values that might be necessary for other modules to execute instr_out
     output logic [PRIVATE_REG_WIDTH-1:0] reg_b_out,
     output logic [PRIVATE_REG_WIDTH-1:0] reg_c_out,
-    output logic instr_valid_for_memory_out
+    output logic instr_valid_for_memory_out,
+    // DEBUGGING OUTPUT LOGICS BELOW
+    output logic [15:0] iters_out, // TEMP TEMP TEMP
+    input wire [3:0] reg_index_in, // TEMP TEMP TEMP
+    output logic [15:0] reg_out, // TEMP TEMP TEMP
+    output logic [7:0] instr_index_out // TEMP TEMP TEMP
 );
     
     // CONTROLLER ------------------------------------------------------------
@@ -104,10 +109,12 @@ module controller #(
                                //    the value in that register divided by 8.
                                //    We divide by 8 to squeeze more iterations
                                //    into 4 bits.
-        OP_SENDITERS = 4'b1110,// senditers(a_reg):
+        OP_SENDITERS = 4'b1110,// senditers(x_count, y_count):
                                //    Write mandelbrot_iters to the address at
-                               //    the value of a_reg in the
-                               //    frame buffer, ready to be colored in!
+                               //    HEIGHT * x_count + y_count. We use two
+                               //    registers because, for displays with more
+                               //    than 65536 = 2**16 pixels, one register
+                               //    will overflow!
                                //    Note that mandelbrot_iter has width
                                //    FMA_COUNT * 4 bits, i.e., FMA_COUNT
                                //    concurrent pixels, and stores the (number of iteration / 8) before
@@ -147,12 +154,17 @@ module controller #(
     assign reg14 = registers[14];
     assign reg15 = registers[15];
 
+    assign reg_out = registers[reg_index_in]; // TEMP (y_val register)
+    assign iters_out = reg15; // TEMP (iters register)
+
     // Instruction tracking
     localparam INSTRUCTION_DEPTH = $clog2(INSTRUCTION_COUNT);
     logic [0:INSTRUCTION_DEPTH-1] instruction_index;
     logic [0:INSTRUCTION_DEPTH-1] prefetching_index;
     logic [0:INSTRUCTION_WIDTH-1] current_instruction;
     logic [0:INSTRUCTION_WIDTH-1] prefetched_instruction;
+
+    assign instr_index_out = instruction_index; // TEMP TEMP TEMP
 
     // Prefetch the next instruction, unless we are at the last instruction.
     assign prefetching_index = (instruction_index < INSTRUCTION_COUNT - 1) ? instruction_index + 1 : instruction_index;
@@ -210,6 +222,7 @@ module controller #(
                 IDLE: begin
                     if (continue_in) begin
                         state <= LOAD_INSTRUCTION;
+                        instr_ready <= 0;
                     end
                 end
 
@@ -240,6 +253,11 @@ module controller #(
                         OP_END: begin
                             state <= IDLE;
                             instruction_index <= 0;
+                            just_used_prefetch <= 0;
+                            compare_reg <= 0;
+                            for (int i = 0; i < PRIVATE_REG_COUNT; i = i + 1) begin
+                                registers[i] <= 0;
+                            end
                         end
 
                         OP_XOR: begin
@@ -271,7 +289,7 @@ module controller #(
                         end
                     endcase 
 
-                    if (instr[0:3] != OP_END) begin
+                    if (instr[0:3] != OP_END && instr[0:3] != OP_PAUSE) begin
                         // If the instruction wasn't a jump, immediately execute the next instruction.
                         //if (instr[0:3] != OP_JUMP) begin
                         //    state <= EXECUTE_INSTRUCTION;
@@ -291,7 +309,7 @@ module controller #(
             // 2. HDMI (to be implemented)
 
             // Instruction will be valid for memory if we are about to execute an instruction, meaning we are currently on LOAD_INSTRUCTION.
-            instr_valid_for_memory_out <= state == LOAD_INSTRUCTION; //(
+            instr_valid_for_memory_out <= (state == LOAD_INSTRUCTION && instr_ready); //(
                 //instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
                 //instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
                 //instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB ||

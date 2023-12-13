@@ -12,10 +12,10 @@ module top_level(
   output logic [2:0] hdmi_tx_n, // hdmi output signals (negatives)
   output logic hdmi_clk_p, hdmi_clk_n, // differential hdmi clock
 
-  output logic [6:0] ss0_c,
-  output logic [6:0] ss1_c,
-  output logic [3:0] ss0_an,
-  output logic [3:0] ss1_an,
+  output logic [6:0] ss0_c, // cathode for upper four digits of seven-segment
+  output logic [6:0] ss1_c, // cathode for lower four digits of seven-segment
+  output logic [3:0] ss0_an, // anode for upper four digits of seven-segment
+  output logic [3:0] ss1_an, // anode for lower four digits of seven-segment
 
   input wire [7:0] pmoda,
   input wire [2:0] pmodb,
@@ -23,23 +23,8 @@ module top_level(
   output logic pmodblock
 );
 
-    assign led[7:0] = sw[7:0]; // set green LEDs to flip on with switches
-    assign rgb1 = 0; // turn off rgb LEDs (active high)
-    assign rgb0 = 0; // turn off rgb LEDs (active high)
-
-    // Set system reset to button 0
-    logic sys_rst;
-    assign sys_rst = btn[0];
-
-    // Set system "continue" to button 1 (to start again after controller pauses)
-    logic sys_continue;
-    assign sys_continue = btn[1];
-
-    // START HDMI SETUP
-
-    // Clocking variables
-    logic clk_pixel, clk_5x;
-    logic locked;
+    // START 74.25 MHZ CLOCK SETUP
+    logic clk_pixel, clk_5x, locked;
 
     // Clock manager: creates 74.25 MHz and 5 times 74.25 MHz for pixel and TMDS
     hdmi_clk_wiz_720p mhdmicw (
@@ -49,6 +34,32 @@ module top_level(
         .locked(locked),
         .clk_ref(clk_100mhz)
     );
+    
+    // END 74.25 MHZ CLOCK SETUP
+
+    assign rgb1 = 0; // turn off rgb LEDs (active high)
+    assign rgb0 = 0; // turn off rgb LEDs (active high)
+
+    // Set system reset to button 0
+    logic sys_rst;
+    assign sys_rst = btn[0];
+
+    // Set system "continue" to button 1 (debounced, high for one cycle)
+    logic sys_continue, clean_btn_out, clean_btn_out_prev;
+
+    debouncer btn1_db(
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .dirty_in(btn[1]),
+        .clean_out(clean_btn_out)
+    );
+
+    always_ff @(posedge clk_pixel) begin
+        sys_continue <= (clean_btn_out_prev == 0 && clean_btn_out == 1);
+        clean_btn_out_prev <= clean_btn_out;
+    end
+
+    // START HDMI SETUP
 
     // Signals to drive the video pipeline
     logic [10:0] hcount;
@@ -140,9 +151,6 @@ module top_level(
     OBUFDS OBUFDS_red  (.I(tmds_signal[2]), .O(hdmi_tx_p[2]), .OB(hdmi_tx_n[2]));
     OBUFDS OBUFDS_clock(.I(clk_pixel), .O(hdmi_clk_p), .OB(hdmi_clk_n));
 
-    assign ss0_c = 0; //ss_c; //control upper four digit's cathodes!
-    assign ss1_c = 0; //ss_c; //same as above but for lower four digits!
-
     // END HDMI SETUP
 
     // START GPU SETUP
@@ -150,7 +158,7 @@ module top_level(
     localparam PRIVATE_REG_WIDTH=16;
     localparam PRIVATE_REG_COUNT=16;
     localparam INSTRUCTION_WIDTH=32;
-    localparam INSTRUCTION_COUNT=62;    // UPDATE TO MATCH PROGRAM_FILE!
+    localparam INSTRUCTION_COUNT=100;    // UPDATE TO MATCH PROGRAM_FILE! (overestimates okay)
     localparam DATA_CACHE_WIDTH=16;
     localparam DATA_CACHE_DEPTH=4096;
 
@@ -162,7 +170,7 @@ module top_level(
     localparam ADDR_LENGTH=$clog2(36000 / LINE_WIDTH);
 
     localparam WIDTH=320;
-    localparam HEIGHT=160;
+    localparam HEIGHT=320;
     localparam ITERS_BITS=4;
 
     // logics for FMAs
@@ -180,7 +188,6 @@ module top_level(
     // logics for memory
     logic [0:INSTRUCTION_WIDTH-1] memory_instr_in;
     logic memory_instr_valid_in;
-    logic memory_idle_out;
     logic [LINE_WIDTH-1:0] memory_abc_out;
     logic memory_use_new_c_out;
     logic memory_fma_output_can_be_valid_out;
@@ -189,13 +196,15 @@ module top_level(
     logic mandelbrot_iters_valid_out;
     logic [ITERS_BITS*FMA_COUNT-1:0] mandelbrot_iters_out;
     logic [$clog2(WIDTH*HEIGHT)-1:0] mandelbrot_addr_out;
-
-    //// TEMP TEMP TEMP
-    assign led[15:8] = mandelbrot_iters_out; // show mandelbrot_iters on the LEDs
-    //// TEMP TEMP TEMP
+    logic [LINE_WIDTH-1:0] write_buffer_out; // TEMP TEMP TEMP (DEBUGGING)
+    logic [LINE_WIDTH-1:0] bram_temp_in_out; // TEMP TEMP TEMP (DEBUGGING)
 
     // logics for controller
-    logic [WORD_WIDTH-1:0] controller_reg_a, controller_reg_b, controller_reg_c;
+    logic [PRIVATE_REG_WIDTH-1:0] controller_reg_a, controller_reg_b, controller_reg_c;
+    logic [PRIVATE_REG_WIDTH-1:0] iters_out; // TEMP TEMP TEMP (DEBUGGING)
+    logic [3:0] reg_index_in; // TEMP TEMP TEMP (DEBUGGING)
+    logic [PRIVATE_REG_WIDTH-1:0] reg_out; // TEMP TEMP TEMP (DEBUGGING)
+    logic [7:0] instr_index_out; // TEMP TEMP TEMP (DEBUGGING)
 
     // Instantiate 2 FMA blocks!
     fma #(
@@ -265,7 +274,9 @@ module top_level(
         .frame_buffer_swap_out(frame_buffer_swap_out),
         .mandelbrot_iters_valid_out(mandelbrot_iters_valid_out),
         .mandelbrot_iters_out(mandelbrot_iters_out),
-        .mandelbrot_addr_out(mandelbrot_addr_out)
+        .mandelbrot_addr_out(mandelbrot_addr_out),
+        .write_buffer_out(write_buffer_out),  // TEMP TEMP TEMP (DEBUGGING)
+        .bram_temp_in_out(bram_temp_in_out)   // TEMP TEMP TEMP (DEBUGGING)
     );
 
     // Instantiate controller!
@@ -285,7 +296,11 @@ module top_level(
         .reg_a_out(controller_reg_a),
         .reg_b_out(controller_reg_b),
         .reg_c_out(controller_reg_c),
-        .instr_valid_for_memory_out(memory_instr_valid_in)
+        .instr_valid_for_memory_out(memory_instr_valid_in),
+        .iters_out(iters_out), // TEMP TEMP TEMP
+        .reg_index_in(reg_index_in), // TEMP TEMP TEMP
+        .reg_out(reg_out), // TEMP TEMP TEMP
+        .instr_index_out(instr_index_out) // TEMP TEMP TEMP
     );
 
     always_comb begin
@@ -297,6 +312,8 @@ module top_level(
     // END GPU SETUP
     
     // START FRAME BUFFER SETUP
+
+    logic GPU_writing_to_BRAM_A_out; // TEMP TEMP TEMP (debugging)
 
     // Instantiate frame buffer!
     frame_buffer #(
@@ -316,10 +333,71 @@ module top_level(
         .swap_in(frame_buffer_swap_out),
         .red_out(red),
         .green_out(green),
-        .blue_out(blue)
+        .blue_out(blue),
+        .GPU_writing_to_BRAM_A_out(GPU_writing_to_BRAM_A_out)
     );
 
     // END FRAME BUFFER SETUP
+    
+    // START DEBUGGING SETUP
+
+    // Use the seven-segment display to display 32 bits split up like this:
+    //   - chosen reg (16 bits)
+    //   - iters (8 bits)
+    //   - instruction index (8 bits)
+    //
+    // OR (controlled by sw[15])
+    //
+    //   - Memory's temp write buffer (32 bit window selected by sw[12:11])
+    //
+    // OR (controlled by sw[14])
+    //
+    //   - Memory's bram_temp_in (32 bit window selected by sw[12:11])
+    //
+    // OR (controlled by sw[13])
+    //
+    //  - Write buffer's internal line_out (32 bit window selected by sw[12:11])
+    logic [31:0] ssd_val_to_display;
+    logic [7:0] ssd_tester;
+
+    always_ff @(posedge clk_pixel) begin
+        if (sys_rst) begin
+            ssd_tester <= 0;
+        end else if (sys_continue) begin
+            ssd_tester <= ssd_tester + 1;
+        end
+    end
+
+    assign led[15:8] = mandelbrot_iters_out; // show mandelbrot_iters on the LEDs
+    assign led[3:0] = ssd_tester[3:0];
+    assign led[4] = GPU_writing_to_BRAM_A_out;
+
+    assign reg_index_in = sw[3:0];
+    assign ssd_val_to_display = (sw[15] ? write_buffer_out[96-32*(sw[12:11]+1) +: 32] : (
+            sw[14] ? bram_temp_in_out[96-32*(sw[12:11]+1) +: 32] : (
+                sw[13] ? write_buffer_line_out[96-32*(sw[12:11]+1) +: 32] : {
+                    reg_out,
+                    iters_out[7:0],
+                    instr_index_out[7:0]
+                }
+            )
+        )
+    );
+        
+    // Instantiate seven-segment display!
+    logic [6:0] ss_c;
+    seven_segment_controller mssc(
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .val_in(ssd_val_to_display),
+        .cat_out(ss_c),
+        .an_out({ss0_an, ss1_an}) // wire up anodes directly
+    );
+
+    assign ss0_c = ss_c; // set upper four cathodes to same as lower four
+    assign ss1_c = ss_c; // set upper four cathodes to same as lower four
+
+    // END DEBUGGING SETUP
 
 endmodule // top_level
 

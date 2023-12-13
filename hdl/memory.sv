@@ -15,7 +15,7 @@ module memory #(
     parameter ADDR_LENGTH = $clog2(36000 / 96),  // 96 bits in a line. 36kb/96 = 375
     parameter INSTRUCTION_WIDTH = 32,      // number of bits per instruction
     parameter WIDTH = 320,
-    parameter HEIGHT = 160,
+    parameter HEIGHT = 320,
     parameter ITERS_BITS = 4
 ) (
     // Use first 4-bit reg for loading immediate. 4'b0 means loading 0th word in the line, 4'b1 means 1st, ... , 4'b101 means 5th 
@@ -39,7 +39,9 @@ module memory #(
     output logic frame_buffer_swap_out,
     output logic mandelbrot_iters_valid_out,
     output logic [ITERS_BITS*FMA_COUNT-1:0] mandelbrot_iters_out,
-    output logic [$clog2(WIDTH*HEIGHT)-1:0] mandelbrot_addr_out
+    output logic [$clog2(WIDTH*HEIGHT)-1:0] mandelbrot_addr_out,
+    output logic [LINE_WIDTH-1:0] write_buffer_out, // TEMP TEMP TEMP (DEBUGGING)
+    output logic [LINE_WIDTH-1:0] bram_temp_in_out  // TEMP TEMP TEMP (DEBUGGING)
 );
     // OP_CODEs: read in from FMA_write_buffer 4'b1001
     // OP_CODEs: write to FMAs 4'b1010
@@ -100,16 +102,20 @@ module memory #(
                                //    the value in that register divided by 8.
                                //    We divide by 8 to squeeze more iterations
                                //    into 4 bits.
-        OP_SENDITERS = 4'b1110 // senditers(a_reg):
+        OP_SENDITERS = 4'b1110,// senditers(x_count, y_count):
                                //    Write mandelbrot_iters to the address at
-                               //    the value of a_reg in the
-                               //    frame buffer, ready to be colored in!
+                               //    HEIGHT * x_count + y_count. We use two
+                               //    registers because, for displays with more
+                               //    than 65536 = 2**16 pixels, one register
+                               //    will overflow!
                                //    Note that mandelbrot_iter has width
                                //    FMA_COUNT * 4 bits, i.e., FMA_COUNT
                                //    concurrent pixels, and stores the (number of iteration / 8) before
                                //    the value of the pixel diverges. The default 
                                //    value is 15, i.e. no divergence. Due to space 
                                //    constraints, mandelbrot_iters is 4 bits per FMA.
+        OP_PAUSE = 4'b1111     // pause():
+                               //   Controller pauses execution until it receives a signal to continue.
     } isa;
 
     // 3 registers, 4 bits each
@@ -123,6 +129,10 @@ module memory #(
     logic [LINE_WIDTH - 1 : 0] bram_temp_in; // accumulating stuff to put into BRAM
     logic [LINE_WIDTH - 1 : 0] bram_in; // BRAM listens to this line
     logic [LINE_WIDTH - 1 : 0] write_buffer_read_in_buffer; // BRAM takes values from here
+    // TEMP TEMP TEMP
+    assign write_buffer_out = write_buffer_read_in_buffer;
+    assign bram_temp_in_out = bram_temp_in;
+    // TEMP TEMP TEMP
     logic bram_read; // flag for bram to read
     logic bram_write; // flag for bram to write
     logic [1:0] bram_write_ready; // counter variable that helps control abc_valid_out
@@ -223,7 +233,6 @@ module memory #(
                         fma_output_can_be_valid_out <= (instr_in[24:27] == 4'b0001);
                         abc_out <= bram_temp_in;
                         abc_valid_out <= 1'b1; // temp: set to 1 then to 0
-                            // Once controller prefetches to run one instruction per cycle, we won't need this workaround
                     end
                     OP_OR: begin
                         // For each FMA, if its z_i = x_i + y_i has magnitude greater than 2, it has diverged:
@@ -236,8 +245,8 @@ module memory #(
                             if (mandelbrot_iters[ITERS_BITS*FMA_COUNT - (fma_id+1)*ITERS_BITS +: ITERS_BITS] == (1<<ITERS_BITS)-1) begin
                                 // Write to mandelbrot_iters if the point has diverged (squared magnitude greater than 4)
                                 if (`WRITE_BUFFER_OUTPUT_WITHOUT_LAST_BIT(fma_id, 4'b0010) >= (4 << FIXED_POINT)) begin
-                                    // Store iters >> 3 (so that 0-127 fits in 0-15)
-                                    mandelbrot_iters[ITERS_BITS*FMA_COUNT - (fma_id+1)*ITERS_BITS +: ITERS_BITS] <= controller_reg_a[7-1:7-ITERS_BITS];//controller_reg_a[3:0]; // same as iters >> 4
+                                    // Store iters >> 2 (so that 0-63 fits in 0-15)
+                                    mandelbrot_iters[ITERS_BITS*FMA_COUNT - (fma_id+1)*ITERS_BITS +: ITERS_BITS] <= controller_reg_a[6-1:6-ITERS_BITS];//controller_reg_a[3:0]; // same as iters >> 4
                                 end
                             end
                         end
@@ -247,7 +256,7 @@ module memory #(
                         mandelbrot_iters_out <= mandelbrot_iters;
 
                         // Output address for frame buffer to write to
-                        mandelbrot_addr_out <= controller_reg_a;
+                        mandelbrot_addr_out <= HEIGHT*controller_reg_a + controller_reg_b;
                         
                         // Reset mandelbrot_iters to all ones
                         mandelbrot_iters <= -1;
@@ -256,6 +265,10 @@ module memory #(
                         // If the instruction is not recognized, no op.
                     end
                 endcase
+            end else begin
+                // If instruction is not valid:
+                abc_valid_out <= 0;
+                fma_output_can_be_valid_out <= 0;
             end
         end
     end
