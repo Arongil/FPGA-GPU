@@ -27,12 +27,12 @@
 
 # DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
 # DY = 2^(-7) = 0.0078125 so that Y_MAX = 1.25
-xor 0 0               # zero out register 0
-addi 2 0 320#8          # HEIGHT = 160: set register 2 to 160
-addi 3 0 320#2          # WIDTH = 160: set register 3 to 320
-addi 4 0 -2f#-1f          # X_MIN = -2 (f notation compiles into fixed-point)
-addi 5 0 63              # MAX_ITERS = 127 (register 5)
-addi 6 0 -1.25f#0f#0.25f       # Y_MIN = -1.25 (f notation compiles into fixed-point)
+xor 0 0                   # zero out register 0
+addi 2 0 320#8            # HEIGHT = 320: set register 2 to 320
+addi 3 0 320#2            # WIDTH = 320: set register 3 to 320
+addi 4 0 -1.875f#-1f      # X_MIN = -1.875 (f notation compiles into fixed-point)
+addi 5 0 63               # MAX_ITERS = 127 (register 5)
+addi 6 0 -1.25f#0f#0.25f  # Y_MIN = -1.25 (f notation compiles into fixed-point)
 
 # FREE REGISTERS: reg 7, reg 12
 
@@ -171,9 +171,9 @@ senditers 8 9  # send iters to address at (x_val, y_val) of frame buffer
 
 # </FOR LOOP Y: INNER LOGIC>
 
-addi 11 11 0.015625f   # increment y_val by 2*DY (FMA_COUNT*DY)
-addi 14 14 2           # increment addr_for_iters by FMA_COUNT = 2
-addi 9 9 2             # increment y_counter by FMA_COUNT = 2
+addi 11 11 0.125f      # increment y_val by FMA_COUNT*DY
+addi 14 14 16          # increment addr_for_iters by FMA_COUNT
+addi 9 9 16            # increment y_counter by FMA_COUNT
 bge 0 0                # prepare to jump (compare 0 >= 0)
 jump (((2)))           # jump to (2) [JUMP MARKER 3]
 

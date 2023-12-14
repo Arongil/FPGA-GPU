@@ -164,8 +164,8 @@ module top_level(
 
     localparam FIXED_POINT=10;
     localparam WORD_WIDTH=16;
-    localparam LINE_WIDTH=96;
-    localparam FMA_COUNT=2;
+    localparam LINE_WIDTH=768;
+    localparam FMA_COUNT=16;
 
     localparam ADDR_LENGTH=$clog2(36000 / LINE_WIDTH);
 
@@ -174,10 +174,10 @@ module top_level(
     localparam ITERS_BITS=4;
 
     // logics for FMAs
-    logic [3*WORD_WIDTH-1:0] fma_abc_1, fma_abc_2;
-    logic fma_c_valid_in_1, fma_c_valid_in_2;
-    logic [WORD_WIDTH-1:0] fma_out_1, fma_out_2;
-    logic fma_valid_out_1, fma_valid_out_2;
+    logic [3*WORD_WIDTH-1:0] fma_abc_1, fma_abc_2, fma_abc_3, fma_abc_4, fma_abc_5, fma_abc_6, fma_abc_7, fma_abc_8, fma_abc_9, fma_abc_10, fma_abc_11, fma_abc_12, fma_abc_13, fma_abc_14, fma_abc_15, fma_abc_16;
+    logic [WORD_WIDTH-1:0] fma_out_1, fma_out_2, fma_out_3, fma_out_4, fma_out_5, fma_out_6, fma_out_7, fma_out_8, fma_out_9, fma_out_10, fma_out_11, fma_out_12, fma_out_13, fma_out_14, fma_out_15, fma_out_16;
+    logic fma_c_valid_in_1, fma_c_valid_in_2, fma_c_valid_in_3, fma_c_valid_in_4, fma_c_valid_in_5, fma_c_valid_in_6, fma_c_valid_in_7, fma_c_valid_in_8, fma_c_valid_in_9, fma_c_valid_in_10, fma_c_valid_in_11, fma_c_valid_in_12, fma_c_valid_in_13, fma_c_valid_in_14, fma_c_valid_in_15, fma_c_valid_in_16;
+    logic fma_valid_out_1, fma_valid_out_2, fma_valid_out_3, fma_valid_out_4, fma_valid_out_5, fma_valid_out_6, fma_valid_out_7, fma_valid_out_8, fma_valid_out_9, fma_valid_out_10, fma_valid_out_11, fma_valid_out_12, fma_valid_out_13, fma_valid_out_14, fma_valid_out_15, fma_valid_out_16;
 
     // logics for fma write buffer
     logic [WORD_WIDTH*FMA_COUNT-1:0] write_buffer_fma_out;
@@ -206,14 +206,34 @@ module top_level(
     logic [PRIVATE_REG_WIDTH-1:0] reg_out; // TEMP TEMP TEMP (DEBUGGING)
     logic [7:0] instr_index_out; // TEMP TEMP TEMP (DEBUGGING)
 
-    // Instantiate 2 FMA blocks!
+    // Instantiate FMA blocks!
+    /*
+    generate
+        for (genvar fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin : gen_fma
+            fma #(
+                .WIDTH(WORD_WIDTH),
+                .FIXED_POINT(FIXED_POINT)
+            ) fma_instance (
+                .clk_in(clk_pixel),
+                .rst_in(sys_rst),
+                .abc(memory_abc_out[(FMA_COUNT - fma_id - 1)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+                .valid_in(memory_abc_valid_out),
+                .c_valid_in(memory_use_new_c_out),
+                .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+                .out(write_buffer_fma_out[(FMA_COUNT - fma_id - 1)*WORD_WIDTH :+ WORD_WIDTH]),
+                .valid_out(write_buffer_fma_valid_out[FMA_COUNT - fma_id - 1])
+            );
+        end
+    endgenerate
+    */
+
     fma #(
         .WIDTH(WORD_WIDTH),
         .FIXED_POINT(FIXED_POINT)
     ) fma1 (
         .clk_in(clk_pixel),
         .rst_in(sys_rst),
-        .abc(memory_abc_out[LINE_WIDTH - 1:LINE_WIDTH/2]),
+        .abc(memory_abc_out[(FMA_COUNT - 1)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
         .valid_in(memory_abc_valid_out),
         .c_valid_in(memory_use_new_c_out),
         .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
@@ -227,12 +247,208 @@ module top_level(
     ) fma2 (
         .clk_in(clk_pixel),
         .rst_in(sys_rst),
-        .abc(memory_abc_out[LINE_WIDTH/2 - 1:0]),
+        .abc(memory_abc_out[(FMA_COUNT - 2)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
         .valid_in(memory_abc_valid_out),
         .c_valid_in(memory_use_new_c_out),
         .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
         .out(fma_out_2),
         .valid_out(fma_valid_out_2)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma3 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 3)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_3),
+        .valid_out(fma_valid_out_3)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma4 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 4)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_4),
+        .valid_out(fma_valid_out_4)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma5 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 5)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_5),
+        .valid_out(fma_valid_out_5)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma6 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 6)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_6),
+        .valid_out(fma_valid_out_6)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma7 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 7)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_7),
+        .valid_out(fma_valid_out_7)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma8 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 8)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_8),
+        .valid_out(fma_valid_out_8)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma9 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 9)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_9),
+        .valid_out(fma_valid_out_9)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma10 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 10)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_10),
+        .valid_out(fma_valid_out_10)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma11 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 11)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_11),
+        .valid_out(fma_valid_out_11)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma12 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 12)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_12),
+        .valid_out(fma_valid_out_12)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma13 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 13)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_13),
+        .valid_out(fma_valid_out_13)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma14 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 14)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_14),
+        .valid_out(fma_valid_out_14)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma15 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 15)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_15),
+        .valid_out(fma_valid_out_15)
+    );
+
+    fma #(
+        .WIDTH(WORD_WIDTH),
+        .FIXED_POINT(FIXED_POINT)
+    ) fma16 (
+        .clk_in(clk_pixel),
+        .rst_in(sys_rst),
+        .abc(memory_abc_out[(FMA_COUNT - 16)*LINE_WIDTH/FMA_COUNT +: LINE_WIDTH/FMA_COUNT]),
+        .valid_in(memory_abc_valid_out),
+        .c_valid_in(memory_use_new_c_out),
+        .output_can_be_valid_in(memory_fma_output_can_be_valid_out),
+        .out(fma_out_16),
+        .valid_out(fma_valid_out_16)
     );
 
     // Instantiate write buffer!
@@ -305,8 +521,8 @@ module top_level(
 
     always_comb begin
         // Set FMA write buffer to wire up from every individual FMA
-        write_buffer_fma_out = {fma_out_1, fma_out_2};
-        write_buffer_fma_valid_out = {fma_valid_out_1, fma_valid_out_2};
+        write_buffer_fma_out = {fma_out_1, fma_out_2, fma_out_3, fma_out_4, fma_out_5, fma_out_6, fma_out_7, fma_out_8, fma_out_9, fma_out_10, fma_out_11, fma_out_12, fma_out_13, fma_out_14, fma_out_15, fma_out_16};
+        write_buffer_fma_valid_out = {fma_valid_out_1, fma_valid_out_2, fma_valid_out_3, fma_valid_out_4, fma_valid_out_5, fma_valid_out_6, fma_valid_out_7, fma_valid_out_8, fma_valid_out_9, fma_valid_out_10, fma_valid_out_11, fma_valid_out_12, fma_valid_out_13, fma_valid_out_14, fma_valid_out_15, fma_valid_out_16};
     end
 
     // END GPU SETUP

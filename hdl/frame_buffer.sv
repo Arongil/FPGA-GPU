@@ -43,16 +43,6 @@ module frame_buffer #(
     assign clock_a = GPU_writing_to_BRAM_A ? sys_clk_in : hdmi_clk_in;
     assign clock_b = !GPU_writing_to_BRAM_A ? sys_clk_in : hdmi_clk_in;
 
-    // Enable write if GPU is writing to that BRAM.
-    logic write_enable_a, write_enable_b;
-    assign write_enable_a = GPU_writing_to_BRAM_A;
-    assign write_enable_b = !GPU_writing_to_BRAM_A;
-
-    // Set read enable to opposite of write enable.
-    logic read_enable_a, read_enable_b;
-    assign read_enable_a = !write_enable_a;
-    assign read_enable_b = !write_enable_b;
-
     // Set output data to come from the BRAM to which the GPU is not writing.
     logic [ITERS_BITS-1:0] out_a;
     logic [ITERS_BITS-1:0] out_b;
@@ -81,9 +71,19 @@ module frame_buffer #(
     // Write data from GPU into memory. Because the GPU sends data in batches of FMA_COUNT,
     // we enter a finite state machine to write the values one-by-one until we are done.
     logic writing_iters_flag;
-    logic [$clog2(FMA_COUNT)-1:0] iters_index;
+    logic [$clog2(FMA_COUNT):0] iters_index;
     logic [FMA_COUNT*ITERS_BITS-1:0] mandelbrot_iters_buffer;
     logic [ITERS_BITS-1:0] iters_to_write;
+    //
+    // Enable write if GPU is writing to that BRAM.
+    logic write_enable_a, write_enable_b;
+    assign write_enable_a = GPU_writing_to_BRAM_A && writing_iters_flag;
+    assign write_enable_b = !GPU_writing_to_BRAM_A && writing_iters_flag;
+
+    // Set read enable to opposite of write enable.
+    logic read_enable_a, read_enable_b;
+    assign read_enable_a = !write_enable_a;
+    assign read_enable_b = !write_enable_b;
 
     // Define the FSM that writes each iters value sequentially.
     always_ff @(posedge sys_clk_in) begin
@@ -93,20 +93,22 @@ module frame_buffer #(
             mandelbrot_iters_buffer <= 0;
             iters_to_write <= 0;
         end else begin
-            // Store the Mandelbrot iters when it comes!
+            // Store the Mandelbrot iters when it comes! Valid is high for one cycle.
             if (mandelbrot_iters_valid_in) begin
                 mandelbrot_iters_buffer <= mandelbrot_iters_in;
                 writing_iters_flag <= 1;
-            end
+                iters_index <= 0;
 
-            // Once we receive Mandelbrot iters, write its values one by one.
-            if (writing_iters_flag) begin
-                // Increment iters_index. The final time, it will reset to 0.
+                // Prepare the first value to write.
+                iters_to_write <= mandelbrot_iters_in[ITERS_BITS*FMA_COUNT - (0+1)*ITERS_BITS +: ITERS_BITS];
+            end else if (writing_iters_flag) begin
+                // Increment iters_index.
                 iters_index <= iters_index + 1;
                 // If we are on the last iters, reset the writing flag.
                 writing_iters_flag <= iters_index != FMA_COUNT - 1;
-                // Tell the BRAM which iters to write in.
-                iters_to_write <= mandelbrot_iters_buffer[ITERS_BITS*FMA_COUNT - (iters_index+1)*ITERS_BITS +: ITERS_BITS];
+
+                // Prefetch the next value to write.
+                iters_to_write <= mandelbrot_iters_buffer[ITERS_BITS*FMA_COUNT - (iters_index+1 + 1)*ITERS_BITS +: ITERS_BITS];
             end
         end
     end
@@ -115,6 +117,10 @@ module frame_buffer #(
     logic [$clog2(2*WIDTH*HEIGHT)-1:0] addr_write_GPU, addr_read_HDMI;
     assign addr_write_GPU = addr_write_in + iters_index;
     assign addr_read_HDMI = x_draw_in * HEIGHT + y_draw_in; // col-major
+    // HYPOTHESIS: the streaky lines are every FMA_COUNT pixels, copying over
+    // the color that should be at the bottom (first FMA) but to the n+1-th
+    // FMA. Solution: either bug in assembly, or more likely bug in reading
+    // the BRAM here in good old HDMI.
     
     logic [$clog2(2*WIDTH*HEIGHT)-1:0] addr_a, addr_b;
     assign addr_a = GPU_writing_to_BRAM_A ? addr_write_GPU : addr_read_HDMI;
