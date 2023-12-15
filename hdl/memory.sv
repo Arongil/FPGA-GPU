@@ -64,8 +64,8 @@ module memory #(
                                //    Tell the dual frame buffer to switch which buffer the GPU is writing to.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_SENDL   = 4'b1000,  // sendl(addr):
-                               //    Send line into the BRAM at memory address addr.
+        OP_ADD     = 4'b1000,  // add(reg_a, reg_b, reg_c)
+                               //    Set reg_a to reg_b_val + reg_c_val.
         OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
                                //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
@@ -77,7 +77,7 @@ module memory #(
                                //       Shuffle operates on the previous k results of each FMA independently.
                                //       The number k of past results is a parameter that we set to 3 for now.
         OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):
-                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff_at_c_reg. That way we can load Mandelbrot pixels in nicely.
         OP_WRITEB  = 4'b1011,  // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
@@ -173,7 +173,7 @@ module memory #(
             //end
 
             if (instr_valid_in) begin
-                bram_read <= (instr_in[0:3] == OP_SENDL);
+                //bram_read <= (instr_in[0:3] == OP_SENDL);
 
                 case (instr_in[0:3])
                     OP_NOP: begin
@@ -184,10 +184,6 @@ module memory #(
                         // What "+:" means:
                         // w[x +: y] == w[(x+y-1) : x]
                         bram_temp_in[LINE_WIDTH - (instr_in[4:7]+1) * WORD_WIDTH +: WORD_WIDTH] <= instr_in[8:23];
-                    end
-                    OP_SENDL: begin
-                        addr <= instr_in[8:23];
-                        bram_in[LINE_WIDTH - 1 : 0] <= bram_temp_in[LINE_WIDTH - 1 : 0];
                     end
                     OP_LOADB: begin
                         // instr[4:7] is shuffle1, instr[24:27] is shuffle2, instr[28:31] is shuffle2
@@ -219,7 +215,7 @@ module memory #(
                         //    Load value at controller_reg_b, put into slot instr_in[4:7] = abc (0 -> a, 1 -> b, 2 -> c)
                         //    where FMA_i's value is set to reg_val + i * immediate_diff.
                         for (int fma_id = 0; fma_id < FMA_COUNT; fma_id = fma_id + 1) begin
-                            `BRAM_TEMP(fma_id, instr_in[4:7]) <= controller_reg_b + fma_id * instr_in[8:23];
+                            `BRAM_TEMP(fma_id, instr_in[4:7]) <= controller_reg_b + fma_id * controller_reg_c;
                         end
                     end
                     OP_WRITEB: begin

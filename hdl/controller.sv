@@ -71,8 +71,8 @@ module controller #(
                                //    Tell the dual frame buffer to switch which buffer the GPU is writing to.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_SENDL   = 4'b1000,  // sendl(addr, val):
-                               //    Send line into the BRAM at memory address val.
+        OP_ADD     = 4'b1000,  // add(reg_a, reg_b, reg_c)
+                               //    Set reg_a to reg_b_val + reg_c_val.
         OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
                                //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
@@ -84,7 +84,7 @@ module controller #(
                                //       Shuffle operates on the previous k results of each FMA independently.
                                //       The number k of past results is a parameter that we set to 3 for now.
         OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):
-                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff. That way we can load Mandelbrot pixels in nicely.
+                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff_at_c_reg. That way we can load Mandelbrot pixels in nicely.
         OP_WRITEB  = 4'b1011,  // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
@@ -252,8 +252,8 @@ module controller #(
 
                         OP_END: begin
                             state <= IDLE;
-                            instruction_index <= 0;
-                            just_used_prefetch <= 0;
+                            //instruction_index <= 0;
+                            //just_used_prefetch <= 0;
                             compare_reg <= 0;
                             for (int i = 0; i < PRIVATE_REG_COUNT; i = i + 1) begin
                                 registers[i] <= 0;
@@ -278,6 +278,10 @@ module controller #(
                                 compare_reg <= 0;
                                 instruction_index <= instr[8:23];
                             end
+                        end
+
+                        OP_ADD: begin
+                            registers[instr[4:7]] <= registers[instr[24:27]] + registers[instr[28:31]];
                         end
 
                         OP_PAUSE: begin

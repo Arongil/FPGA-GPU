@@ -62,8 +62,8 @@ module top_level(
     // START HDMI SETUP
 
     // Signals to drive the video pipeline
-    logic [10:0] hcount;
-    logic [9:0] vcount;
+    logic [10:0] hcount, hcount_unscaled;
+    logic [9:0] vcount, vcount_unscaled;
     logic vert_sync;
     logic hor_sync;
     logic active_draw;
@@ -74,14 +74,18 @@ module top_level(
     video_sig_gen mvg(
         .clk_pixel_in(clk_pixel),
         .rst_in(sys_rst),
-        .hcount_out(hcount),
-        .vcount_out(vcount),
+        .hcount_out(hcount_unscaled),
+        .vcount_out(vcount_unscaled),
         .vs_out(vert_sync),
         .hs_out(hor_sync),
         .ad_out(active_draw),
         .nf_out(new_frame),
         .fc_out(frame_count)
     );
+
+    // Scale up the image
+    assign hcount = hcount_unscaled >> 1;
+    assign vcount = vcount_unscaled >> 1;
 
     // These colors will be set by the frame buffer.
     logic [7:0] red, green, blue;

@@ -37,14 +37,14 @@ def fbswap():
 def loadi(a_reg, val):
     return (0b0111 << 28) + (a_reg << 24) + (val << 8)
 
-def sendl(val):
-    return (0b1000 << 28) + (val << 8)
+def add(a_reg, b_reg, c_reg):
+    return (0b1000 << 28) + (a_reg << 24) + (b_reg << 4) + (c_reg << 0)
 
 def loadb(shuffle1, shuffle2, shuffle3):
     return (0b1001 << 28) + (shuffle1 << 24) + (shuffle2 << 4) + (shuffle3 << 0)
 
-def load(abc, b_reg, diff):
-    return (0b1010 << 28) + (abc << 24) + (diff << 8) + (b_reg << 4)
+def load(abc, b_reg, diff_c_reg):
+    return (0b1010 << 28) + (abc << 24) + (b_reg << 4) + (diff_c_reg << 0)
 
 def writeb(val, replace_c, fma_valid):
     return (0b1011 << 28) + (replace_c << 24) + (val << 8) + (fma_valid << 4)
@@ -70,7 +70,7 @@ str_to_command = {
     "jump": jump,
     "fbswap": fbswap,
     "loadi": loadi,
-    "sendl": sendl,
+    "add": add,
     "loadb": loadb,
     "load": load,
     "writeb": writeb,

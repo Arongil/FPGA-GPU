@@ -25,16 +25,20 @@
 
 # Step 1: Set up mesh of grid points to render
 
-# DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
-# DY = 2^(-7) = 0.0078125 so that Y_MAX = 1.25
-xor 0 0                   # zero out register 0
+xor 0 0                   # zero out register 0 [JUMP MARKER 8]
 addi 2 0 320#8            # HEIGHT = 320: set register 2 to 320
 addi 3 0 320#2            # WIDTH = 320: set register 3 to 320
 addi 4 0 -1.875f#-1f      # X_MIN = -1.875 (f notation compiles into fixed-point)
-addi 5 0 63               # MAX_ITERS = 127 (register 5)
+addi 5 0 63               # MAX_ITERS = 63 (register 5)
 addi 6 0 -1.25f#0f#0.25f  # Y_MIN = -1.25 (f notation compiles into fixed-point)
 
-# FREE REGISTERS: reg 7, reg 12
+# DX = 2^(-7) = 0.0078125 so that X_MAX = 0.5 
+# DY = 2^(-7) = 0.0078125 so that Y_MAX = 1.25
+addi 7 0 0.0078125f  # set DX
+addi 12 0 0.0078125f  # set DY
+addi 13 0 0.125f      # set DY*FMA_COUNT
+
+# FREE REGISTERS: none
 
 # Step 2: Loop over all grid points
 #   - Use register 8 as x_counter
@@ -51,7 +55,8 @@ addi 6 0 -1.25f#0f#0.25f  # Y_MIN = -1.25 (f notation compiles into fixed-point)
 #     }
 #   }
 
-xor 14 14              # zero out register 14 (addr_for_iters) [JUMP MARKER 7]
+nop                    # [JUMP MARKER 7]
+xor 14 14              # zero out register 14 (addr_for_iters)
 
 # <FOR LOOP X>
 
@@ -86,7 +91,7 @@ load 2 10 0  # load x_val into FMA "c" values
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
 #pause
 # Next, output just y_val into both FMAs for later use.
-load 2 11 0.0078125f  # load y_0 into FMA "c"      (diff DY per FMA)
+load 2 11 12 # load y_0 into FMA "c"      (diff DY per FMA, reg 12)
 write 1 1    # send loaded buffer to the FMAs! (replace_c, fma_valid_out)
 #pause
 # Finally, let's output the squared magnitude of z_0 = x_0 + y_0.
@@ -94,8 +99,8 @@ load 0 10 0  # load x_val into FMA "a" values
 load 1 10 0  # load x_val into FMA "b" values
 load 2 0 0   # load 0 into FMA "c" values
 write 1 0    # send loaded buffer to the FMAs! (replace_c, not fma_valid_out)
-load 0 11 0.0078125f # load y_0 into FMA "a"       (diff DY per FMA)
-load 1 11 0.0078125f # load y_0 into FMA "b"       (diff DY per FMA)
+load 0 11 12 # load y_0 into FMA "a"       (diff DY per FMA, reg 12)
+load 1 11 12 # load y_0 into FMA "b"       (diff DY per FMA, reg 12)
 write 0 1    # send loaded buffer to the FMAs! (not replace c, fma_valid_out)
 #pause
 nop          # stall for final value to write
@@ -133,7 +138,7 @@ write 0 1      # send loaded buffer to FMAs! (not replace_c, fma_valid_out)
 
 # Let's compute 2*x*y + y_0 (FULL y_{i+1})
 loadb 4 2 0         # set buffer to "2*x_i y_i 0" (4 2 0)
-load 2 11 0.0078125f # load y_0 into FMA "c"       (diff DY per FMA)
+load 2 11 12        # load y_0 into FMA "c"       (diff DY per FMA, reg 12)
 #pause
 write 1 1           # send loaded buffer to FMAs! (replace_c, fma_valid_out)
 #pause
@@ -171,7 +176,7 @@ senditers 8 9  # send iters to address at (x_val, y_val) of frame buffer
 
 # </FOR LOOP Y: INNER LOGIC>
 
-addi 11 11 0.125f      # increment y_val by FMA_COUNT*DY
+add 11 11 13           # increment y_val by DY*FMA_COUNT
 addi 14 14 16          # increment addr_for_iters by FMA_COUNT
 addi 9 9 16            # increment y_counter by FMA_COUNT
 bge 0 0                # prepare to jump (compare 0 >= 0)
@@ -181,7 +186,7 @@ jump (((2)))           # jump to (2) [JUMP MARKER 3]
 
 # </FOR LOOP X: INNER LOGIC>
 
-addi 10 10 0.0078125f  # increment x_val by DX
+add 10 10 7            # increment x_val by DX (reg 7)
 addi 8 8 1             # increment x_counter by 1
 bge 0 0                # prepare to jump (compare 0 >= 0)
 jump (((0)))           # jump to (0) [JUMP MARKER 1]
@@ -190,8 +195,31 @@ jump (((0)))           # jump to (0) [JUMP MARKER 1]
 
 fbswap  # tell the frame buffer to begin reading in the iters we just computed!
 
-# Increment the num_iters we calculate by 1, then loop back to the start
-#addi 5 5 1
-#jump (((7)))
+pause  # wait for user input before zooming
+
+# Zoom in towards a starfish formation at (-0.5623, -0.6427).
+# Start x_min = -1.875, y_min = -1.25 (registers 4 and 6)
+# Use STEPS=8 to get there.
+
+addi 4 4 0.1640875f # nudge x to the right
+addi 6 6 0.0759125f # nudge y up a bit
+addi 7 7 -0.0009765625f # decrease DX by the smallest amount possible 
+addi 12 12 -0.0009765625f # decrease DY by the smallest amount possible
+
+# addi 5 5 9 # increase max_iters by 9 (so it starts at 63, ends at 126)
+
+# Set DY*FMA_COUNT again
+addi 13 0 0   # set DY*FMA_COUNT = 0
+add 13 13 12  # set DY*FMA_COUNT = DY
+add 13 13 13  # set DY_FMA_COUNT = 2*DY
+add 13 13 13  # set DY_FMA_COUNT = 4*DY
+add 13 13 13  # set DY_FMA_COUNT = 8*DY
+add 13 13 13  # set DY_FMA_COUNT = 16*DY
+
+bge 0 12      # if 0 >= DY (so we are at max zoom), then restart
+jump (((8)))
+
+bge 0 0       # prepare to jump (compare 0 >= 0)
+jump (((7)))  # render again!
 
 end
