@@ -18,8 +18,17 @@ module controller #(
 ) (
     input wire clk_in,
     input wire rst_in,
+    input wire continue_in, // don't reset, but go to LOAD_INSTRUCTION state
     output logic [0:INSTRUCTION_WIDTH-1] instr_out, // instruction to send to memory
-    output logic instr_valid_for_memory_out
+    output logic [PRIVATE_REG_WIDTH-1:0] reg_a_out, // any controller private register values that might be necessary for other modules to execute instr_out
+    output logic [PRIVATE_REG_WIDTH-1:0] reg_b_out,
+    output logic [PRIVATE_REG_WIDTH-1:0] reg_c_out,
+    output logic instr_valid_for_memory_out,
+    // DEBUGGING OUTPUT LOGICS BELOW
+    output logic [15:0] iters_out, // TEMP TEMP TEMP
+    input wire [3:0] reg_index_in, // TEMP TEMP TEMP
+    output logic [15:0] reg_out, // TEMP TEMP TEMP
+    output logic [7:0] instr_index_out // TEMP TEMP TEMP
 );
     
     // CONTROLLER ------------------------------------------------------------
@@ -58,22 +67,25 @@ module controller #(
                                //    Sets compare_reg to 1 iff a_reg >= b_reg
         OP_JUMP    = 4'b0101,  // jump(jump_to):
                                //    Jumps to instruction at immediate index jump_to, if compare_reg is 1.
-        OP_SMA     = 4'b0110,  // sma(val):
-                               //    Set memory address to the immediate val in the data cache.
+        OP_FBSWAP  = 4'b0110,  // fbswap():
+                               //    Tell the dual frame buffer to switch which buffer the GPU is writing to.
         OP_LOADI   = 4'b0111,  // loadi(reg_a, val):
                                //    Load immediate val into line at memory address, at word reg_a (not value at a_reg, but the direct bits).
-        OP_SENDL   = 4'b1000,  // sendl():
-                               //    Send line at memory address into the BRAM.
-        OP_LOADB   = 4'b1001,  // loadb(val, shuffle):
+        OP_ADD     = 4'b1000,  // add(reg_a, reg_b, reg_c)
+                               //    Set reg_a to reg_b_val + reg_c_val.
+        OP_LOADB   = 4'b1001,  // loadb(shuffle1, shuffle2, shuffle3):
                                //    Load FMA buffer contents into the immediate addr in the data cache.
                                //    Shuffle is a SIMD description for how to rearrange the direct output before placing it in memory.
-                               //       Shuffle is an immediate value of the form xxx, where x is in the set {0, 1, 2}.
-                               //       The x's represent the -2, -1, 0 results of each FMA. Example:
-                               //           shuffle = 002 means set memory address to "a a c" from the FMAs
-                               //           shuffle = 120 means set memory address to "b c a" from the FMAs
+                               //       Shuffle is three register values of the form xxx, where x is in the set {-3, -2, -1, 0, 1, 2, 3}.
+                               //       The x's represent the previous three outputs of each FMA, where negative means 2's complement and 0 means to place all zeros. Example:
+                               //           shuffle = 1 2 0 means set memory address to "a b 0" from the FMAs
+                               //           shuffle = -3 3 1 means set memory address to "-c c a" from the FMAs
+                               //       Additionally, the values {4, 5, 6} are allowed. These correspond to 2*a, 2*b, 2*c.
                                //       Shuffle operates on the previous k results of each FMA independently.
                                //       The number k of past results is a parameter that we set to 3 for now.
-        OP_WRITEB  = 4'b1010   // writeb(val, replace_c, fma_valid):
+        OP_LOAD    = 4'b1010,  // load(abc, b_reg, diff):
+                               //    Load value at controller b_reg into line address (set by SMA), put into slot abc (0 -> a, 1 -> b, 2 -> c). where FMA_i's value is set to reg_val + i * diff_at_c_reg. That way we can load Mandelbrot pixels in nicely.
+        OP_WRITEB  = 4'b1011,  // writeb(val, replace_c, fma_valid):
                                //    Write contents of immediate addr in the data cache to FMA blocks. 
                                //    The replace_c value is the bits of reg_a.
                                //    If replace_c is 4'b0000, FMAs will use previous c values.
@@ -82,6 +94,35 @@ module controller #(
                                //    If fma_valid is 4'b0000, the FMAs will not output results.
                                //    If fma_valid is 4'b0001, the FMAs will output their results.
                                //    Typically fma_valid is 0 until the end of a chained dot product, when it is set to 1 once.
+        OP_WRITE = 4'b1100,    // write(replace_c, fma_valid)
+                               //     Write directly from temporary register in memory module to FMAs.
+                               //     Arguments replace_c and fma_valid are the same as in writeb.
+        OP_OR       = 4'b1101, // or(iter):
+                               //    for every (x, y) pair in the
+                               //    fma_write_buffer value that we catch in
+                               //    the memory module, set the corresponding
+                               //    mandelbrot_iters local logic in memory to
+                               //    iter if mandelbrot_iters[i] == 15 and |x| >
+                               //    = 2 or |y| >= 2. mandelbrot_iters[i] is
+                               //    whether i^th FMA's pixel has diverged.
+                               //    Note that iter is a reg_a, and we use
+                               //    the value in that register divided by 8.
+                               //    We divide by 8 to squeeze more iterations
+                               //    into 4 bits.
+        OP_SENDITERS = 4'b1110,// senditers(x_count, y_count):
+                               //    Write mandelbrot_iters to the address at
+                               //    HEIGHT * x_count + y_count. We use two
+                               //    registers because, for displays with more
+                               //    than 65536 = 2**16 pixels, one register
+                               //    will overflow!
+                               //    Note that mandelbrot_iter has width
+                               //    FMA_COUNT * 4 bits, i.e., FMA_COUNT
+                               //    concurrent pixels, and stores the (number of iteration / 8) before
+                               //    the value of the pixel diverges. The default 
+                               //    value is 15, i.e. no divergence. Due to space 
+                               //    constraints, mandelbrot_iters is 4 bits per FMA.
+        OP_PAUSE = 4'b1111     // pause():
+                               //   Controller pauses execution until it receives a signal to continue.
     } isa;
 
     enum {
@@ -95,7 +136,7 @@ module controller #(
     logic compare_reg;
 
     // Uncomment to track registers in GTKWave for debugging!
-    logic [PRIVATE_REG_WIDTH-1:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7; // 8 more not displayed
+    logic [PRIVATE_REG_WIDTH-1:0] reg0, reg1, reg2, reg3, reg4, reg5, reg6, reg7, reg8, reg9, reg10, reg11, reg12, reg13, reg14, reg15;
     assign reg0 = registers[0];
     assign reg1 = registers[1];
     assign reg2 = registers[2];
@@ -104,6 +145,17 @@ module controller #(
     assign reg5 = registers[5];
     assign reg6 = registers[6];
     assign reg7 = registers[7];
+    assign reg8 = registers[8];
+    assign reg9 = registers[9];
+    assign reg10 = registers[10];
+    assign reg11 = registers[11];
+    assign reg12 = registers[13];
+    assign reg13 = registers[13];
+    assign reg14 = registers[14];
+    assign reg15 = registers[15];
+
+    assign reg_out = registers[reg_index_in]; // TEMP (y_val register)
+    assign iters_out = reg15; // TEMP (iters register)
 
     // Instruction tracking
     localparam INSTRUCTION_DEPTH = $clog2(INSTRUCTION_COUNT);
@@ -111,6 +163,8 @@ module controller #(
     logic [0:INSTRUCTION_DEPTH-1] prefetching_index;
     logic [0:INSTRUCTION_WIDTH-1] current_instruction;
     logic [0:INSTRUCTION_WIDTH-1] prefetched_instruction;
+
+    assign instr_index_out = instruction_index; // TEMP TEMP TEMP
 
     // Prefetch the next instruction, unless we are at the last instruction.
     assign prefetching_index = (instruction_index < INSTRUCTION_COUNT - 1) ? instruction_index + 1 : instruction_index;
@@ -120,7 +174,7 @@ module controller #(
         .RAM_WIDTH(INSTRUCTION_WIDTH),
         .RAM_DEPTH(INSTRUCTION_COUNT),
         .RAM_PERFORMANCE("HIGH_PERFORMANCE"),     // Select "HIGH_PERFORMANCE"
-        .INIT_FILE(`FPATH(isa-matrix-mult.mem))  // Specify file to init RAM
+        .INIT_FILE(`FPATH(isa-mandelbrot.mem))    // Specify file to init RAM
     ) instruction_buffer (
         .clka(clk_in),                   // PORT 1
         .addra(instruction_index),       // Read address (current instruction)
@@ -141,11 +195,18 @@ module controller #(
         .rstb(rst_in)                    // Reset wire
     );
 
-    // Execute instructions
+    // Track which instruction we are executing
     logic instr_ready, just_used_prefetch;
     logic [0:INSTRUCTION_WIDTH-1] instr;
     assign instr = current_instruction; // redesign once we do prefetching
     assign instr_out = current_instruction;
+    
+    // Output the three register values that the current instruction references for other modules to use.
+    assign reg_a_out = registers[instr[4:7]];
+    assign reg_b_out = registers[instr[24:27]];
+    assign reg_c_out = registers[instr[28:31]];
+
+    // Execute instructions
     always_ff @(posedge clk_in) begin
         if (rst_in) begin
             state <= LOAD_INSTRUCTION;
@@ -159,6 +220,10 @@ module controller #(
         end else begin
             case (state)
                 IDLE: begin
+                    if (continue_in) begin
+                        state <= LOAD_INSTRUCTION;
+                        instr_ready <= 0;
+                    end
                 end
 
                 LOAD_INSTRUCTION: begin
@@ -187,7 +252,12 @@ module controller #(
 
                         OP_END: begin
                             state <= IDLE;
-                            instruction_index <= 0;
+                            //instruction_index <= 0;
+                            //just_used_prefetch <= 0;
+                            compare_reg <= 0;
+                            for (int i = 0; i < PRIVATE_REG_COUNT; i = i + 1) begin
+                                registers[i] <= 0;
+                            end
                         end
 
                         OP_XOR: begin
@@ -205,8 +275,17 @@ module controller #(
                         OP_JUMP: begin
                             if (compare_reg) begin
                                 instr_ready <= 0; // force two-cycle read for new instruction_index
+                                compare_reg <= 0;
                                 instruction_index <= instr[8:23];
                             end
+                        end
+
+                        OP_ADD: begin
+                            registers[instr[4:7]] <= registers[instr[24:27]] + registers[instr[28:31]];
+                        end
+
+                        OP_PAUSE: begin
+                            state <= IDLE;
                         end
 
                         default: begin
@@ -214,7 +293,7 @@ module controller #(
                         end
                     endcase 
 
-                    if (instr[0:3] != OP_END) begin
+                    if (instr[0:3] != OP_END && instr[0:3] != OP_PAUSE) begin
                         // If the instruction wasn't a jump, immediately execute the next instruction.
                         //if (instr[0:3] != OP_JUMP) begin
                         //    state <= EXECUTE_INSTRUCTION;
@@ -225,20 +304,21 @@ module controller #(
                         state <= LOAD_INSTRUCTION; // TEMP -- remove when using prefetching and instead directly go to next instruction
                         //end
                     end
-
-                    // Tell other modules when their instructions are valid.
-                    // 1. Memory (op code is NOP, SMA, LOADI, SENDL, LOADB, or WRITEB)
-                    // 2. HDMI (to be implemented)
-                    instr_valid_for_memory_out <= (
-                        instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
-                        instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
-                        instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB
-                    );
                 end
 
                 default: begin
                 end
             endcase
+            // Tell other modules when their instructions are valid.
+            // 2. HDMI (to be implemented)
+
+            // Instruction will be valid for memory if we are about to execute an instruction, meaning we are currently on LOAD_INSTRUCTION.
+            instr_valid_for_memory_out <= (state == LOAD_INSTRUCTION && instr_ready); //(
+                //instr[0:3] == OP_NOP   || instr[0:3] == OP_SMA    ||
+                //instr[0:3] == OP_LOADI || instr[0:3] == OP_SENDL  || 
+                //instr[0:3] == OP_LOADB || instr[0:3] == OP_WRITEB ||
+                //instr[0:3] == OP_LOAD  || instr[0:3] == OP_WRITE
+            //);
         end
     end
 

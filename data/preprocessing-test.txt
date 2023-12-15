@@ -1,0 +1,18 @@
+# This program tests jump markers and fixed point numbers in pre-processing.
+
+xor 0 0
+addi 1 0 4
+nop             # [JUMP MARKER 0]
+addi 2 0 -1f
+addi 3 0 2.125f
+# random comment
+
+addi 3 3 1      # [JUMP MARKER 899]
+
+bge 3 1
+jump (((0)))
+
+nop
+jump (((899)))
+
+end

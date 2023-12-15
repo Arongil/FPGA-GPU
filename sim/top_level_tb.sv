@@ -6,7 +6,7 @@ module top_level_tb;
     localparam PRIVATE_REG_WIDTH=16;
     localparam PRIVATE_REG_COUNT=16;
     localparam INSTRUCTION_WIDTH=32;
-    localparam INSTRUCTION_COUNT=54;    // UPDATE TO MATCH PROGRAM_FILE!
+    localparam INSTRUCTION_COUNT=61;    // UPDATE TO MATCH PROGRAM_FILE!
     localparam DATA_CACHE_WIDTH=16;
     localparam DATA_CACHE_DEPTH=4096;
 
@@ -16,6 +16,8 @@ module top_level_tb;
     localparam FMA_COUNT=2;
 
     localparam ADDR_LENGTH=$clog2(36000 / 96);
+
+    localparam CYCLES_TO_RUN = 1950;//2*INSTRUCTION_COUNT + 8;
 
     // make logics for inputs and outputs!
     logic clk_in;
@@ -43,7 +45,7 @@ module top_level_tb;
     logic memory_abc_valid_out;
 
     // logics for controller
-
+    logic [WORD_WIDTH-1:0] controller_reg_a, controller_reg_b, controller_reg_c;
 
     // Instantiate 2 FMA blocks!
     fma #(
@@ -98,11 +100,13 @@ module top_level_tb;
     ) main_memory (
         .clk_in(clk_in),
         .rst_in(rst_in),
+        .controller_reg_a(controller_reg_a),
+        .controller_reg_b(controller_reg_b),
+        .controller_reg_c(controller_reg_c),
         .write_buffer_read_in(write_buffer_line_out),
         .write_buffer_valid_in(write_buffer_line_valid),
         .instr_in(memory_instr_in),
         .instr_valid_in(memory_instr_valid_in),
-        .idle_out(memory_idle_out),
         .abc_out(memory_abc_out),
         .abc_valid_out(memory_abc_valid_out),
         .use_new_c_out(memory_use_new_c_out),
@@ -122,6 +126,9 @@ module top_level_tb;
         .clk_in(clk_in),
         .rst_in(rst_in),
         .instr_out(memory_instr_in),
+        .reg_a_out(controller_reg_a),
+        .reg_b_out(controller_reg_b),
+        .reg_c_out(controller_reg_c),
         .instr_valid_for_memory_out(memory_instr_valid_in)
     );
 
@@ -151,8 +158,12 @@ module top_level_tb;
         rst_in = 0;
         #10;
 
-        for (int cycle = 0; cycle < 2*INSTRUCTION_COUNT + 8; cycle = cycle + 1) begin
-            $display("State %1d | Executing %4b", controller_module.state, controller_module.instr[0:3]);
+        for (int cycle = 0; cycle < CYCLES_TO_RUN; cycle = cycle + 1) begin
+            if (cycle < 10 || CYCLES_TO_RUN - cycle < 10) begin
+                $display("State %1d | Executing %4b", controller_module.state, controller_module.instr[0:3]);
+            end else if (cycle == 10) begin
+                $display("...\n...\n...");
+            end
             #10;
         end
 
