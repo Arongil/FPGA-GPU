@@ -1,4 +1,7 @@
 # FPGA-GPU
+
+[Check out the YouTube video!](https://www.youtube.com/watch?v=708qtJFmCG0)
+
 6.205 Final Project by Laker and Hanfei
 
 ## Steps to program the GPU
